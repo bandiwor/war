@@ -37,6 +37,8 @@ export interface BodycamPresenterOptions {
   readonly frozenTime?: number;
   /** Visual-test mode: simulated camera yaw rate (rad/s) for motion effects. */
   readonly frozenSpin?: number;
+  /** Playing back a replay (OSD shows PLAY instead of REC). */
+  readonly playback?: boolean;
 }
 
 /**
@@ -69,6 +71,7 @@ export class BodycamPresenter implements Presenter {
   private internalWidth = 1;
   private internalHeight = 1;
   private readonly resizeObserver: ResizeObserver;
+  private colliderLines: THREE.LineSegments | null = null;
 
   private constructor(
     private readonly options: BodycamPresenterOptions,
@@ -111,7 +114,13 @@ export class BodycamPresenter implements Presenter {
       depth,
       invViewProj: new THREE.Matrix4(),
       prevViewProj: new THREE.Matrix4(),
-      osd: { simTime: 0, battery: 1, flashlightOn: true, signalLost: false },
+      osd: {
+        simTime: 0,
+        battery: 1,
+        flashlightOn: true,
+        signalLost: false,
+        mode: options.playback === true ? 'play' : 'rec',
+      },
       frozen: options.frozenTime !== undefined,
     };
     this.resizeObserver = new ResizeObserver(() => {
@@ -157,6 +166,43 @@ export class BodycamPresenter implements Presenter {
     this.present(1);
     clonePostFx(saved, this.postFx);
     this.lastTime = -1;
+  }
+
+  /** Physics wireframe overlay (debug). Drawn into the HDR scene so post effects apply. */
+  setColliderOverlay(enabled: boolean): void {
+    if (enabled && this.colliderLines === null) {
+      const geometry = new THREE.BufferGeometry();
+      const material = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        depthTest: true,
+        toneMapped: false,
+      });
+      this.colliderLines = new THREE.LineSegments(geometry, material);
+      this.colliderLines.frustumCulled = false;
+      this.street.scene.add(this.colliderLines);
+    }
+    if (!enabled && this.colliderLines !== null) {
+      this.street.scene.remove(this.colliderLines);
+      this.colliderLines.geometry.dispose();
+      const m = this.colliderLines.material;
+      if (!Array.isArray(m)) m.dispose();
+      this.colliderLines = null;
+    }
+  }
+
+  private updateColliderOverlay(): void {
+    if (this.colliderLines === null) return;
+    const { vertices, colors } = this.options.sandbox.physics.debugLines();
+    const g = this.colliderLines.geometry;
+    g.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    // Rapier gives RGBA; boost so lines read through the night exposure.
+    const rgb = new Float32Array((colors.length / 4) * 3);
+    for (let i = 0, j = 0; i < colors.length; i += 4, j += 3) {
+      rgb[j] = (colors[i] ?? 0) * 4;
+      rgb[j + 1] = (colors[i + 1] ?? 0) * 4;
+      rgb[j + 2] = (colors[i + 2] ?? 0) * 4;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
   }
 
   setFactories(factories: EffectFactories): void {
@@ -225,6 +271,7 @@ export class BodycamPresenter implements Presenter {
     );
     this.flashlight.update(this.camera, view.flashlightOn, view.battery, time);
     animateStreet(this.street, time);
+    this.updateColliderOverlay();
 
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.setViewport(0, 0, this.internalWidth, this.internalHeight);

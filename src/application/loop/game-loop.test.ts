@@ -61,6 +61,18 @@ describe('GameLoop', () => {
     expect(loop.isRunning).toBe(false);
   });
 
+  it('pauses exactly at a requested tick', () => {
+    const { frames, loop, simulation } = setup();
+    loop.start();
+    frames.emit(0);
+    loop.pauseAtTick(4);
+    frames.emit(80); // 4.8 steps worth of time, max 5 per frame
+    expect(simulation.tick).toBe(4);
+    expect(loop.isPaused).toBe(true);
+    frames.emit(200);
+    expect(simulation.tick).toBe(4);
+  });
+
   it('pauses and single-steps', () => {
     const { frames, loop, simulation, alphas } = setup();
     loop.start();

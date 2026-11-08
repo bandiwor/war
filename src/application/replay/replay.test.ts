@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { seed } from '../../domain/core/brand';
+import { seed, tick } from '../../domain/core/brand';
 import { Rng } from '../../domain/math/prng';
 import { createEmptyWorld } from '../scenes/empty-world';
 import { Simulation } from '../simulation';
 import { World } from '../../domain/ecs/world';
+import { ReplayInput, RecordingInput } from './replay-input';
 import { ReplayRecorder, formatReplay, parseReplay, playReplay, type Replay } from './replay';
 import { scriptedCommands } from './scripted-input';
 
@@ -13,7 +14,7 @@ function record(ticks: number, checkpointEvery: number): { replay: Replay; hash:
   const s = seed(77);
   const sim = create(s);
   const script = scriptedCommands(Rng.fromSeed(5), ticks);
-  const rec = new ReplayRecorder(s, sim.tickRate, checkpointEvery);
+  const rec = new ReplayRecorder('empty', s, sim.tickRate, checkpointEvery);
   for (let t = 0; t < ticks; t++) {
     const cmds = script[t] ?? [];
     rec.record(sim.tick, cmds);
@@ -58,7 +59,7 @@ describe('replay', () => {
   });
 
   it('recorder without checkpoints and with gaps', () => {
-    const rec = new ReplayRecorder(seed(1), 60);
+    const rec = new ReplayRecorder('empty', seed(1), 60);
     rec.record(0, []);
     rec.record(1, [{ type: 'action', action: 'use', pressed: true }]);
     rec.afterStep(create(seed(1)));
@@ -94,6 +95,36 @@ describe('replay', () => {
     ).toThrow('strictly increasing');
     expect(() => parseReplay({ ...base, frames: [{ t: 3, c: move }] })).toThrow('beyond length');
     expect(parseReplay(base).length).toBe(3);
+  });
+
+  it('migrates v1 replays (stage 0, no scene) to v2 on the empty world', () => {
+    const { replay, hash } = record(120, 60);
+    const { scene: _scene, ...rest } = replay;
+    const v1 = { ...rest, version: 1 };
+    const migrated = parseReplay(JSON.parse(JSON.stringify(v1)));
+    expect(migrated.version).toBe(2);
+    expect(migrated.scene).toBe('empty');
+    expect(playReplay(migrated, create).finalHash).toBe(hash);
+    expect(() => parseReplay({ ...v1, frames: 'x' })).toThrow();
+  });
+
+  it('ReplayInput feeds frames back by tick; RecordingInput records through', () => {
+    const { replay } = record(200, 0);
+    const input = new ReplayInput(replay);
+    const rec = new ReplayRecorder('empty', seed(77), 60);
+    const recording = new RecordingInput(input);
+    recording.recorder = rec;
+    const sim = create(seed(77));
+    for (let t = 0; t < 210; t++) sim.step(recording.commandsFor(sim.tick));
+    expect(input.finished).toBe(true);
+    expect(input.commandsFor(tick(5000))).toEqual([]);
+    expect(rec.ticks).toBe(210);
+    expect(rec.finish().frames).toEqual(replay.frames);
+    expect(new ReplayInput(replay).commandsFor(tick(150))).toEqual(
+      replay.frames.find((f) => f.t === 150)?.c ?? [],
+    );
+    const unrecorded = new RecordingInput(new ReplayInput(replay));
+    expect(() => unrecorded.commandsFor(tick(0))).not.toThrow();
   });
 
   it('rejects a simulation with a different tick rate', () => {

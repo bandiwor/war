@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SURFACE_IDS } from '../world/surfaces';
 
 /**
  * Procedural PBR material recipes. A recipe is pure data; `bakeMaterial`
@@ -65,6 +66,8 @@ export const MaterialRecipeSchema = z.object({
   bumpiness: z.number().min(0).max(8),
   /** World metres covered by one texture tile. */
   tileMeters: z.number().positive(),
+  /** Acoustic/physical surface for footsteps, impacts and AI noise. */
+  surface: z.enum(SURFACE_IDS),
 });
 
 export type MaterialRecipe = z.infer<typeof MaterialRecipeSchema>;
@@ -91,6 +94,7 @@ export const MATERIALS = {
     ],
     bumpiness: 2.5,
     tileMeters: 4,
+    surface: 'asphalt',
   },
   concrete: {
     label: 'Weathered concrete',
@@ -112,6 +116,7 @@ export const MATERIALS = {
     ],
     bumpiness: 1.5,
     tileMeters: 3,
+    surface: 'concrete',
   },
   brick: {
     label: 'Old red brick',
@@ -139,6 +144,7 @@ export const MATERIALS = {
     ],
     bumpiness: 3,
     tileMeters: 1.6,
+    surface: 'concrete',
   },
   rustedMetal: {
     label: 'Rusted steel',
@@ -159,6 +165,7 @@ export const MATERIALS = {
     ],
     bumpiness: 2,
     tileMeters: 2,
+    surface: 'metal',
   },
   paintedMetal: {
     label: 'Chipped olive paint on steel',
@@ -179,6 +186,7 @@ export const MATERIALS = {
     ],
     bumpiness: 1.5,
     tileMeters: 1.2,
+    surface: 'metal',
   },
   woodPlanks: {
     label: 'Damp wooden planks',
@@ -199,6 +207,7 @@ export const MATERIALS = {
     ],
     bumpiness: 2,
     tileMeters: 1.2,
+    surface: 'wood',
   },
 } as const satisfies Record<string, MaterialRecipe>;
 

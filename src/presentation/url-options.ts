@@ -12,6 +12,7 @@ import { isQualityName, type QualityName } from '../infrastructure/render/qualit
  *   ?spin=2.5           visual-test mode: fake camera yaw rate (rad/s) for motion effects
  *   ?signal=0.8         force a signal-loss level
  *   ?bench=20           benchmark: scripted walk for N seconds, then a frame-time report
+ *   ?replay=session     play back the replay stored by the debug menu (Sim tab)
  *   ?stim=damage:0.5,fear:0.2,emi:0
  */
 export interface UrlOptions {
@@ -25,6 +26,7 @@ export interface UrlOptions {
   readonly signal: number;
   readonly spin: number;
   readonly benchSeconds: number;
+  readonly replay: 'session' | null;
   readonly stimulus: BodycamStimulus | null;
 }
 
@@ -59,6 +61,7 @@ export function parseUrlOptions(search: string): UrlOptions {
     signal: num(q.get('signal'), 0),
     spin: num(q.get('spin'), 0),
     benchSeconds: Math.max(0, num(q.get('bench'), 0)),
+    replay: q.get('replay') === 'session' ? 'session' : null,
     stimulus,
   };
 }

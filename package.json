@@ -46,6 +46,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
+    "@dimforge/rapier3d-deterministic-compat": "^0.21.0",
     "three": "^0.187.0",
     "zod": "^4.6.7"
   }

@@ -19,6 +19,7 @@ export class GameLoop {
   private paused = false;
   private pendingSingleSteps = 0;
   private running = false;
+  private pauseAt = -1;
 
   constructor(private readonly options: GameLoopOptions) {
     this.accumulator = new FixedStepAccumulator({
@@ -55,6 +56,11 @@ export class GameLoop {
     this.accumulator.reset();
   }
 
+  /** Pause exactly when the simulation reaches `tick` (debugging, replay inspection). */
+  pauseAtTick(tick: number): void {
+    this.pauseAt = tick;
+  }
+
   /** While paused, run exactly one tick on the next frame (frame-by-frame debugging). */
   stepOnce(): void {
     this.pendingSingleSteps++;
@@ -70,8 +76,18 @@ export class GameLoop {
     } else {
       steps = this.accumulator.advance(delta);
     }
-    for (let i = 0; i < steps; i++) this.simulateOne();
+    for (let i = 0; i < steps && !this.reachedPausePoint(); i++) this.simulateOne();
+    this.reachedPausePoint();
     this.options.presenter.present(this.paused ? 1 : this.accumulator.alpha);
+  }
+
+  /** Pauses (once) when the requested tick is reached. */
+  private reachedPausePoint(): boolean {
+    if (this.pauseAt < 0 || this.options.simulation.tick < this.pauseAt) return false;
+    this.pauseAt = -1;
+    this.paused = true;
+    this.accumulator.reset();
+    return true;
   }
 
   private simulateOne(): void {

@@ -8,6 +8,7 @@ import { PerformanceObserver, constants, performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { createEmptyWorld } from '../src/application/scenes/empty-world';
 import { createSandbox } from '../src/application/scenes/sandbox';
+import { createRapierPhysics } from '../src/infrastructure/physics/rapier-physics';
 import type { Simulation } from '../src/application/simulation';
 import { seed } from '../src/domain/core/brand';
 import { createChurnWorld } from '../tests/fixtures/churn-world';
@@ -28,8 +29,8 @@ const observer = new PerformanceObserver((list) => {
 observer.observe({ entryTypes: ['gc'] });
 
 /** Sandbox with the player walking and the flashlight on: exercises movement, dmath and battery drain. */
-function walkingSandbox(): Simulation {
-  const sim = createSandbox(seed(1)).simulation;
+async function walkingSandbox(): Promise<Simulation> {
+  const sim = createSandbox(seed(1), await createRapierPhysics(60)).simulation;
   sim.step([
     { type: 'move', forward: 1, strafe: 0.3 },
     { type: 'look', yaw: 0.01, pitch: 0 },
@@ -62,7 +63,7 @@ async function measure(
 const results = {
   emptyWorld: await measure('emptyWorld', createEmptyWorld(seed(1)).simulation, 2_000_000),
   churnWorld: await measure('churnWorld', createChurnWorld(seed(1)), 200_000),
-  sandbox: await measure('sandbox', walkingSandbox(), 1_000_000),
+  sandbox: await measure('sandbox', await walkingSandbox(), 100_000),
 };
 observer.disconnect();
 

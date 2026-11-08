@@ -54,6 +54,9 @@ describe('layer boundary lint rules', () => {
     ['src/application/a.ts', "import '../presentation/main';"],
     ['src/infrastructure/a.ts', "import '../presentation/main';"],
     ['src/headless/a.ts', "import '../infrastructure/browser/keyboard-input';"],
+    ['src/headless/a.ts', "import '../infrastructure/render/quality';"],
+    ['src/headless/a.ts', "import '../infrastructure/audio/audio-engine';"],
+    ['src/application/a.ts', "import '@dimforge/rapier3d-deterministic-compat';"],
   ])('%s: %s is forbidden', (file, code) => {
     expect(lint(file, code)).toContain('no-restricted-imports');
   });
@@ -63,6 +66,7 @@ describe('layer boundary lint rules', () => {
     ['src/infrastructure/a.ts', "import '../application/simulation';"],
     ['src/infrastructure/a.ts', "import 'three';"],
     ['src/presentation/a.ts', "import '../infrastructure/browser/keyboard-input';"],
+    ['src/headless/a.ts', "import '../infrastructure/physics/rapier-physics';"],
   ])('%s: %s is allowed', (file, code) => {
     expect(lint(file, code)).toEqual([]);
   });

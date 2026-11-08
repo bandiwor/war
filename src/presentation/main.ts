@@ -1,16 +1,24 @@
+import { BenchmarkInput } from '../application/benchmark-input';
 import { GameLoop } from '../application/loop/game-loop';
 import type { InputSource } from '../application/loop/ports';
-import { BenchmarkInput } from '../application/benchmark-input';
-import { createSandbox } from '../application/scenes/sandbox';
+import { ReplayRecorder } from '../application/replay/replay';
+import { RecordingInput, ReplayInput } from '../application/replay/replay-input';
+import { TICK_RATE } from '../application/scenes/empty-world';
+import { createSandbox, type Sandbox } from '../application/scenes/sandbox';
+import type { Simulation } from '../application/simulation';
 import { seed } from '../domain/core/brand';
 import type { InputCommand } from '../domain/input/commands';
+import { AudioEngine } from '../infrastructure/audio/audio-engine';
+import { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
+import { createRapierPhysics } from '../infrastructure/physics/rapier-physics';
 import { BodycamPresenter } from '../infrastructure/render/bodycam-presenter';
 import { EFFECT_FACTORIES } from '../infrastructure/render/postfx/effects';
 import type { EffectFactories } from '../infrastructure/render/postfx/types';
 import { QUALITY_PRESETS } from '../infrastructure/render/quality';
 import { createTextureBaker } from '../infrastructure/render/textures/texture-baker';
+import { loadSessionReplay, type GameSession } from './session';
 import { applyFxSelection, parseUrlOptions, unknownEffects } from './url-options';
 
 /** Browser composition root: the only place concrete adapters are wired together. */
@@ -25,7 +33,11 @@ async function bootstrap(): Promise<void> {
   status.textContent = 'WAR · generating world…';
   root.append(status);
 
-  const sandbox = createSandbox(seed(opts.seed));
+  const playing = opts.replay === 'session' ? loadSessionReplay() : null;
+  if (playing !== null && playing.scene !== 'sandbox')
+    throw new Error(`Replay is for scene "${playing.scene}"`);
+  const runSeed = seed(playing?.seed ?? opts.seed);
+  const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE));
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
   canvas.dataset['testid'] = 'view';
@@ -39,6 +51,7 @@ async function bootstrap(): Promise<void> {
     factories: EFFECT_FACTORIES,
     baker,
     clock: () => performance.now(),
+    playback: playing !== null,
     ...(opts.frozenTime === undefined
       ? {}
       : { frozenTime: opts.frozenTime, frozenSpin: opts.spin }),
@@ -50,51 +63,85 @@ async function bootstrap(): Promise<void> {
   status.remove();
 
   const sim = sandbox.simulation;
-  const scripted: InputCommand[] = [];
-  if (opts.preTicks > 0) {
-    // Deterministic scripted pre-roll: look, optionally walk, then simulate.
-    sim.step([
-      { type: 'look', yaw: opts.look[0], pitch: opts.look[1] },
-      ...(opts.walk ? [{ type: 'move' as const, forward: 1, strafe: 0 }] : []),
-    ]);
-    for (let i = 1; i < opts.preTicks; i++) sim.step(scripted);
-  }
   const markTick = (): void => {
     root.dataset['tick'] = String(sim.tick);
   };
 
   if (opts.frozenTime !== undefined) {
+    preRoll(sim, opts.preTicks, opts.look, opts.walk);
     presenter.present(1);
     presenter.present(1); // second frame: exposure/history settled
     markTick();
     root.dataset['ready'] = '1';
-    installDev(root, presenter, null, sandbox);
+    installDev(root, presenter, null, newSession(sandbox, null, null));
     return;
   }
 
-  let inputSource: InputSource;
-  if (opts.benchSeconds > 0) {
-    inputSource = new BenchmarkInput();
+  const audio = createAudio();
+  const footsteps = audio === null ? null : new FootstepPlayer(audio, runSeed);
+  if (audio !== null) {
+    const unlock = (): void => {
+      audio.unlock();
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+  }
+
+  let input: InputSource;
+  let recorder: ReplayRecorder | null = null;
+  if (playing !== null) {
+    input = new ReplayInput(playing);
+  } else if (opts.benchSeconds > 0) {
+    input = new BenchmarkInput();
     window.setTimeout(() => {
       reportBenchmark(root, presenter, opts.benchSeconds);
     }, opts.benchSeconds * 1000);
   } else {
-    const input = new KeyboardMouseInput(canvas);
+    const keyboard = new KeyboardMouseInput(canvas);
     canvas.addEventListener('click', () => {
       void canvas.requestPointerLock();
     });
-    inputSource = input;
+    // Black box: every live session records its input from tick 0.
+    const recording = new RecordingInput(keyboard);
+    recorder = new ReplayRecorder('sandbox', runSeed, TICK_RATE, TICK_RATE);
+    recording.recorder = recorder;
+    input = recording;
   }
+
+  const session = newSession(sandbox, recorder, playing, audio, footsteps);
+  const listener = { x: 0, y: 0, z: 0, yaw: 0 };
+  const onTick = (s: Simulation): void => {
+    markTick();
+    recorder?.afterStep(s);
+    const events = s.events;
+    session.footstepCount += events.footstep.size;
+    if (footsteps !== null && audio !== null) {
+      const v = presenter.view;
+      listener.x = v.x;
+      listener.y = v.y;
+      listener.z = v.z;
+      listener.yaw = v.yaw;
+      audio.setListener(listener);
+      for (let i = 0; i < events.footstep.size; i++) {
+        const e = events.footstep.at(i);
+        if (e) footsteps.footstep(e);
+      }
+      for (let i = 0; i < events.land.size; i++) {
+        const e = events.land.at(i);
+        if (e) footsteps.land(e);
+      }
+    }
+  };
   const loop = new GameLoop({
     simulation: sim,
     frames: new RafFrameSource(),
-    input: inputSource,
+    input,
     presenter,
-    onTick: markTick,
+    onTick,
   });
   loop.start();
   root.dataset['ready'] = '1';
-  installDev(root, presenter, loop, sandbox);
+  installDev(root, presenter, loop, session);
 
   if (import.meta.hot) {
     // Shader / effect HMR: swap pass implementations, keep simulation and settings.
@@ -103,6 +150,39 @@ async function bootstrap(): Promise<void> {
       if (isEffectFactories(next)) presenter.setFactories(next);
     });
   }
+}
+
+function newSession(
+  sandbox: Sandbox,
+  recorder: ReplayRecorder | null,
+  playing: GameSession['playing'],
+  audio: AudioEngine | null = null,
+  footsteps: FootstepPlayer | null = null,
+): GameSession {
+  return { sandbox, recorder, playing, audio, footsteps, footstepCount: 0 };
+}
+
+function createAudio(): AudioEngine | null {
+  try {
+    return new AudioEngine();
+  } catch (error) {
+    console.warn('Audio unavailable', error);
+    return null;
+  }
+}
+
+/** Deterministic scripted pre-roll for visual tests: look, optionally walk, then simulate. */
+function preRoll(
+  sim: Simulation,
+  ticks: number,
+  look: readonly [number, number],
+  walk: boolean,
+): void {
+  if (ticks <= 0) return;
+  const first: InputCommand[] = [{ type: 'look', yaw: look[0], pitch: look[1] }];
+  if (walk) first.push({ type: 'move', forward: 1, strafe: 0 });
+  sim.step(first);
+  for (let i = 1; i < ticks; i++) sim.step();
 }
 
 /** Frame-time summary after a ?bench run; also exposed as data attributes for automation. */
@@ -145,13 +225,13 @@ function installDev(
   root: HTMLElement,
   presenter: BodycamPresenter,
   loop: GameLoop | null,
-  sandbox: ReturnType<typeof createSandbox>,
+  session: GameSession,
 ): void {
   if (import.meta.env.DEV) {
     // Dynamic import inside a DEV-only branch: Vite removes it (and the whole
     // debug package) from production builds.
     void import('./debug/debug-menu').then(({ installDebugMenu }) => {
-      installDebugMenu({ root, simulation: sandbox.simulation, loop, presenter });
+      installDebugMenu({ root, simulation: session.sandbox.simulation, loop, presenter, session });
     });
   }
 }

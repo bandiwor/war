@@ -1,6 +1,7 @@
 {
   "format": "war-replay",
-  "version": 1,
+  "version": 2,
+  "scene": "empty",
   "seed": 4242,
   "tickRate": 60,
   "length": 1800,

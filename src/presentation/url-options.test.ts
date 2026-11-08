@@ -30,6 +30,8 @@ describe('url options', () => {
     expect(o.look).toEqual([0.5, -0.1]);
     expect(o.walk).toBe(true);
     expect(o.benchSeconds).toBe(15);
+    expect(o.replay).toBeNull();
+    expect(parseUrlOptions('?replay=session').replay).toBe('session');
     expect(o.signal).toBe(0.7);
     expect(o.stimulus).toEqual({ damage: 0.5, fear: 0, emi: 1 });
     expect(parseUrlOptions('?quality=ultra&seed=abc').quality).toBe('medium');

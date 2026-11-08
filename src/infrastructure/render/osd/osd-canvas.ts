@@ -30,7 +30,7 @@ export class OsdCanvas {
 
   update(s: OsdState, blinkOn: boolean): void {
     const tc = formatTimecode(s.simTime);
-    const key = `${tc}|${String(Math.round(s.battery * 100))}|${String(s.flashlightOn)}|${String(s.signalLost)}|${String(blinkOn)}`;
+    const key = `${tc}|${String(Math.round(s.battery * 100))}|${String(s.flashlightOn)}|${String(s.signalLost)}|${String(blinkOn)}|${s.mode}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
     const g = this.g;
@@ -40,15 +40,25 @@ export class OsdCanvas {
     g.shadowColor = 'rgba(0,0,0,0.9)';
     g.shadowBlur = 3;
 
-    if (blinkOn) {
-      g.fillStyle = '#ff2a1f';
+    if (s.mode === 'play') {
+      g.fillStyle = '#f2f2ee';
       g.beginPath();
-      g.arc(52, 51, 10, 0, Math.PI * 2);
+      g.moveTo(44, 40);
+      g.lineTo(62, 51);
+      g.lineTo(44, 62);
       g.fill();
+      g.fillText('PLAY', 72, 38);
+    } else {
+      if (blinkOn) {
+        g.fillStyle = '#ff2a1f';
+        g.beginPath();
+        g.arc(52, 51, 10, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = '#f2f2ee';
+      g.fillText('REC', 72, 38);
     }
-    g.fillStyle = '#f2f2ee';
-    g.fillText('REC', 72, 38);
-    g.fillText(tc, 150, 38);
+    g.fillText(tc, s.mode === 'play' ? 160 : 150, 38);
     g.textAlign = 'right';
     g.fillText(`${IN_WORLD_DATE}  ${formatClock(s.simTime)}`, OSD_WIDTH - 40, 38);
     g.font = '500 20px ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace';

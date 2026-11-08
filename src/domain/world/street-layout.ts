@@ -42,10 +42,18 @@ export interface LightPiece {
   readonly flicker: number;
 }
 
+/** Invisible collision-only walls (street ends, alley backs). */
+export interface BlockerPiece {
+  readonly center: Vec3;
+  readonly size: Vec3;
+}
+
 export interface StreetLayout {
   readonly boxes: readonly BoxPiece[];
+  readonly blockers: readonly BlockerPiece[];
   readonly props: readonly PropPiece[];
   readonly lights: readonly LightPiece[];
+  /** Feet position and facing of the player start. */
   readonly spawn: { readonly position: Vec3; readonly yaw: number };
   /** Walkable XZ rectangle: [minX, minZ, maxX, maxZ]. */
   readonly walkBounds: readonly [number, number, number, number];
@@ -238,11 +246,20 @@ export function generateStreetLayout(seed: Seed): StreetLayout {
       });
   }
 
+  const alleyDepth = 2.5;
+  const blockers: BlockerPiece[] = [
+    { center: [-(sideX + alleyDepth + 0.5), 5, 0], size: [1, 10, STREET.length + 4] },
+    { center: [sideX + alleyDepth + 0.5, 5, 0], size: [1, 10, STREET.length + 4] },
+    { center: [0, 5, -(halfL + 0.5)], size: [2 * (sideX + alleyDepth), 10, 1] },
+    { center: [0, 5, halfL + 0.5], size: [2 * (sideX + alleyDepth), 10, 1] },
+  ];
+
   return {
     boxes,
+    blockers,
     props,
     lights,
-    spawn: { position: [1.5, 1.7, -halfL + 4], yaw: Math.PI },
+    spawn: { position: [1.5, 0, -halfL + 4], yaw: Math.PI },
     walkBounds: [-sideX + 0.3, -halfL + 0.5, sideX - 0.3, halfL - 0.5],
   };
 }

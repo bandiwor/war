@@ -9,7 +9,13 @@ const FORBIDDEN = {
   application: ['infrastructure', 'presentation', 'headless'],
   infrastructure: ['presentation', 'headless'],
   presentation: ['headless'],
-  headless: ['infrastructure', 'presentation'],
+  // Headless (Node) may use platform-neutral adapters such as physics, never browser ones.
+  headless: [
+    'infrastructure/browser',
+    'infrastructure/render',
+    'infrastructure/audio',
+    'presentation',
+  ],
 };
 
 /** Engine/platform packages allowed only in outer layers. */

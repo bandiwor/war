@@ -16,6 +16,8 @@ export interface OsdState {
   battery: number;
   flashlightOn: boolean;
   signalLost: boolean;
+  /** Recording live footage, or playing back a replay. */
+  mode: 'rec' | 'play';
 }
 
 /** Per-frame values every pass may read. One instance, mutated each frame. */

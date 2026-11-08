@@ -4,6 +4,7 @@ import { buildSchedule, type System } from '../domain/ecs/schedule';
 import type { InputCommand } from '../domain/input/commands';
 import { StateHasher } from '../domain/math/hash';
 import { RngStreams } from '../domain/math/prng';
+import { GameEvents } from '../domain/events/bus';
 
 /** What every system sees for one tick. Reused across ticks (no per-tick allocation). */
 export interface SimContext {
@@ -13,6 +14,8 @@ export interface SimContext {
   /** Fixed step in seconds. */
   readonly dt: number;
   readonly commands: readonly InputCommand[];
+  /** Events emitted this tick; cleared at the start of the next one. */
+  readonly events: GameEvents;
 }
 
 interface MutableContext {
@@ -21,6 +24,7 @@ interface MutableContext {
   tick: Tick;
   dt: number;
   commands: readonly InputCommand[];
+  events: GameEvents;
 }
 
 export interface SimulationOptions {
@@ -28,6 +32,9 @@ export interface SimulationOptions {
   readonly tickRate: number;
   readonly world: World;
   readonly systems: readonly System<SimContext>[];
+  readonly events?: GameEvents;
+  /** Extra state outside the ECS (e.g. the physics world) that the state hash must cover. */
+  readonly hashExtras?: readonly ((h: StateHasher) => void)[];
 }
 
 // Deliberately not Object.freeze()d: iterating a frozen array leaves V8's
@@ -43,6 +50,8 @@ export class Simulation {
   readonly tickRate: number;
   readonly world: World;
   readonly rng: RngStreams;
+  readonly events: GameEvents;
+  private readonly hashExtras: readonly ((h: StateHasher) => void)[];
   private readonly schedule: readonly System<SimContext>[];
   private readonly ctx: MutableContext;
   private readonly hasher = new StateHasher();
@@ -56,6 +65,8 @@ export class Simulation {
     this.tickRate = options.tickRate;
     this.world = options.world;
     this.rng = new RngStreams(options.seed);
+    this.events = options.events ?? new GameEvents();
+    this.hashExtras = options.hashExtras ?? [];
     this.schedule = buildSchedule(options.systems);
     this.ctx = {
       world: this.world,
@@ -63,6 +74,7 @@ export class Simulation {
       tick: toTick(0),
       dt: 1 / options.tickRate,
       commands: NO_COMMANDS,
+      events: this.events,
     };
   }
 
@@ -80,6 +92,7 @@ export class Simulation {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- currentTick is a non-negative integer by construction; avoids the validating constructor in the hot path
     ctx.tick = this.currentTick as Tick;
     ctx.commands = commands;
+    this.events.clear();
     const schedule = this.schedule;
     for (let i = 0; i < schedule.length; i++) schedule[i]?.run(ctx);
     ctx.commands = NO_COMMANDS;
@@ -95,6 +108,7 @@ export class Simulation {
       h.string(name).u32(s.a).u32(s.b).u32(s.c).u32(s.d);
     }
     this.world.hashInto(h);
+    for (const extra of this.hashExtras) extra(h);
     return h.digest();
   }
 }

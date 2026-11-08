@@ -10,6 +10,8 @@ import {
 import type { BodycamPresenter } from '../../infrastructure/render/bodycam-presenter';
 import { FRAME_BUDGETS } from '../../infrastructure/render/budgets';
 import { QUALITY_PRESETS } from '../../infrastructure/render/quality';
+import { downloadReplay, playReplayFile, type GameSession } from '../session';
+import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
 import { el, slider, sparkline } from './widgets';
 
 /** Marker string checked by scripts/check-bundle.mjs to prove tree-shaking. */
@@ -20,6 +22,7 @@ export interface DebugMenuDeps {
   readonly simulation: Simulation;
   readonly loop: GameLoop | null;
   readonly presenter: BodycamPresenter;
+  readonly session: GameSession;
 }
 
 /** Programmatic handle used by e2e tests and the console (DEV only). */
@@ -36,7 +39,12 @@ export interface WarDebugApi {
     drawCalls: number;
     triangles: number;
     graph: string;
+    footsteps: number;
+    audioPlayed: number;
+    replayTicks: number;
   };
+  setColliders(enabled: boolean): void;
+  pauseAtTick(tick: number): void;
 }
 
 declare global {
@@ -49,7 +57,13 @@ declare global {
  * DEV-only debug menu (toggle with `~`). Sections are generated from the
  * registries: adding an effect to POST_EFFECTS adds its toggle and sliders here.
  */
-export function installDebugMenu({ root, simulation, loop, presenter }: DebugMenuDeps): void {
+export function installDebugMenu({
+  root,
+  simulation,
+  loop,
+  presenter,
+  session,
+}: DebugMenuDeps): void {
   const panel = el('div', 'debug-menu');
   panel.dataset['testid'] = 'debug-menu';
   panel.dataset['marker'] = DEBUG_MENU_MARKER;
@@ -95,6 +109,35 @@ export function installDebugMenu({ root, simulation, loop, presenter }: DebugMen
     });
     sim.append(pause, step);
   }
+  const replayBox = el('fieldset');
+  replayBox.append(
+    el(
+      'legend',
+      '',
+      session.playing === null ? 'black-box replay (recording since tick 0)' : 'playing replay',
+    ),
+  );
+  if (session.recorder !== null) {
+    const save = el('button', '', 'Download replay');
+    save.type = 'button';
+    save.addEventListener('click', () => {
+      downloadReplay(session);
+    });
+    replayBox.append(save);
+  }
+  const load = el('input');
+  load.type = 'file';
+  load.accept = '.json,application/json';
+  load.addEventListener('change', () => {
+    const file = load.files?.[0];
+    if (file !== undefined) {
+      playReplayFile(file).catch((error: unknown) => {
+        window.alert(`Invalid replay: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+  });
+  replayBox.append(el('label', '', 'play file '), load);
+  sim.append(replayBox);
 
   // --- Render ---------------------------------------------------------------
   const render = addSection('Render');
@@ -108,7 +151,22 @@ export function installDebugMenu({ root, simulation, loop, presenter }: DebugMen
     url.searchParams.set('quality', quality.value);
     window.location.href = url.toString(); // textures and targets are rebuilt on load
   });
-  render.append(renderInfo, graph.canvas, el('label', '', 'quality '), quality);
+  const colliders = el('input');
+  colliders.type = 'checkbox';
+  colliders.dataset['toggle'] = 'colliders';
+  colliders.addEventListener('change', () => {
+    presenter.setColliderOverlay(colliders.checked);
+  });
+  const colliderLabel = el('label', '', ' physics colliders');
+  colliderLabel.prepend(colliders);
+  render.append(
+    renderInfo,
+    graph.canvas,
+    el('label', '', 'quality '),
+    quality,
+    el('br'),
+    colliderLabel,
+  );
 
   // --- Bodycam --------------------------------------------------------------
   const cam = addSection('Bodycam');
@@ -202,6 +260,9 @@ export function installDebugMenu({ root, simulation, loop, presenter }: DebugMen
       drawCalls: p.drawCalls,
       triangles: p.triangles,
       graph: presenter.graphSummary,
+      footsteps: session.footstepCount,
+      audioPlayed: session.audio?.played ?? 0,
+      replayTicks: session.recorder?.ticks ?? 0,
     };
   };
 
@@ -228,15 +289,30 @@ export function installDebugMenu({ root, simulation, loop, presenter }: DebugMen
       presenter.signal.trigger(performance.now() / 1000);
     },
     stats,
+    pauseAtTick(tick) {
+      loop?.pauseAtTick(tick);
+    },
+    setColliders(enabled) {
+      colliders.checked = enabled;
+      presenter.setColliderOverlay(enabled);
+    },
   };
 
+  const view = createRenderView();
   const refresh = (): void => {
     if (!panel.hidden) {
+      const v = readRenderView(session.sandbox, 1, view);
       simInfo.textContent = [
         `seed   ${String(simulation.seed)}`,
         `tick   ${String(simulation.tick)}`,
         `hash   ${simulation.stateHash()}`,
         `order  ${simulation.systemOrder.join(' → ')}`,
+        '',
+        `pos    ${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.z.toFixed(2)}  speed ${v.speed.toFixed(2)} m/s`,
+        `body   ${v.grounded ? 'grounded' : 'airborne'}  crouch ${v.crouch.toFixed(2)}  stamina ${(v.stamina * 100).toFixed(0)}%`,
+        `steps  ${String(session.footstepCount)}  last surface ${session.footsteps?.lastSurface.value ?? '-'}`,
+        `audio  ${session.audio === null ? 'unavailable' : session.audio.running ? `running, ${String(session.audio.played)} sounds` : 'locked (click to start)'}`,
+        `replay ${session.playing !== null ? `playing ${String(session.playing.length)} ticks` : `${String(session.recorder?.ticks ?? 0)} ticks recorded`}`,
       ].join('\n');
       const s = stats();
       const p = presenter.profiler;

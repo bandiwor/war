@@ -7,24 +7,56 @@ import type { Simulation } from '../simulation';
  * Replay = seed + the commands issued on each tick. Stored sparsely (only
  * ticks with input) so files stay small and diffs stay readable.
  */
-export const REPLAY_VERSION = 1;
+export const REPLAY_VERSION = 2;
+
+/** Scenes a replay can target; playback refuses to run a replay on the wrong scene. */
+export const REPLAY_SCENES = ['empty', 'sandbox'] as const;
+export type ReplayScene = (typeof REPLAY_SCENES)[number];
+
+const Frames = z.array(
+  z.object({ t: z.number().int().nonnegative(), c: z.array(InputCommandSchema).min(1) }),
+);
+const Checkpoints = z.array(z.object({ t: z.number().int().nonnegative(), hash: z.string() }));
+
+const ReplayV1Schema = z.object({
+  format: z.literal('war-replay'),
+  version: z.literal(1),
+  seed: z.number().int().min(0).max(0xffffffff),
+  tickRate: z.number().int().positive(),
+  length: z.number().int().nonnegative(),
+  frames: Frames,
+  checkpoints: Checkpoints,
+});
 
 export const ReplaySchema = z.object({
   format: z.literal('war-replay'),
   version: z.literal(REPLAY_VERSION),
+  scene: z.enum(REPLAY_SCENES),
   seed: z.number().int().min(0).max(0xffffffff),
   tickRate: z.number().int().positive(),
   length: z.number().int().nonnegative(),
-  frames: z.array(
-    z.object({ t: z.number().int().nonnegative(), c: z.array(InputCommandSchema).min(1) }),
-  ),
-  checkpoints: z.array(z.object({ t: z.number().int().nonnegative(), hash: z.string() })),
+  frames: Frames,
+  checkpoints: Checkpoints,
 });
 
 export type Replay = z.infer<typeof ReplaySchema>;
 
+/**
+ * Migrations keyed by source version. v1 (stage 0) predates scenes: every v1
+ * replay was recorded on the empty world.
+ */
+function migrate(json: unknown): unknown {
+  const version: unknown =
+    typeof json === 'object' && json !== null ? Reflect.get(json, 'version') : undefined;
+  if (version === 1) {
+    const v1 = ReplayV1Schema.parse(json);
+    return { ...v1, version: 2, scene: 'empty' };
+  }
+  return json;
+}
+
 export function parseReplay(json: unknown): Replay {
-  const replay = ReplaySchema.parse(json);
+  const replay = ReplaySchema.parse(migrate(json));
   let prev = -1;
   for (const frame of replay.frames) {
     if (frame.t <= prev)
@@ -42,11 +74,16 @@ export class ReplayRecorder {
   private length = 0;
 
   constructor(
+    private readonly scene: ReplayScene,
     private readonly seed: Seed,
     private readonly tickRate: number,
     /** Store a state-hash checkpoint every N ticks (0 = never). */
     private readonly checkpointEvery = 0,
   ) {}
+
+  get ticks(): number {
+    return this.length;
+  }
 
   /** Call with the commands applied on `tick`, before stepping. */
   record(tick: number, commands: readonly InputCommand[]): void {
@@ -67,6 +104,7 @@ export class ReplayRecorder {
     return {
       format: 'war-replay',
       version: REPLAY_VERSION,
+      scene: this.scene,
       seed: this.seed,
       tickRate: this.tickRate,
       length: this.length,

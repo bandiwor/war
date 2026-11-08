@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ReplayRecorder, formatReplay, parseReplay, playReplay, type Replay } from '../../src/application/replay/replay';
 import { scriptedCommands } from '../../src/application/replay/scripted-input';
 import { createEmptyWorld } from '../../src/application/scenes/empty-world';
+import { createSandbox } from '../../src/application/scenes/sandbox';
 import type { Simulation } from '../../src/application/simulation';
 import { seed, type Seed } from '../../src/domain/core/brand';
 import { Rng } from '../../src/domain/math/prng';
@@ -17,10 +18,11 @@ import { createChurnWorld } from '../fixtures/churn-world';
 const UPDATE = process.env['UPDATE_GOLDEN'] === '1';
 const here = (name: string): string => fileURLToPath(new URL(name, import.meta.url));
 
-type Scene = 'empty' | 'churn';
+type Scene = 'empty' | 'churn' | 'sandbox';
 const SCENES: Readonly<Record<Scene, (s: Seed) => Simulation>> = {
   empty: (s) => createEmptyWorld(s).simulation,
   churn: createChurnWorld,
+  sandbox: (s) => createSandbox(s).simulation,
 };
 
 interface GoldenCase {
@@ -35,6 +37,8 @@ const CASES: readonly GoldenCase[] = [
   { scene: 'empty', seed: 7, ticks: 36000, input: true },
   { scene: 'churn', seed: 1337, ticks: 3600, input: false },
   { scene: 'churn', seed: 2024, ticks: 10000, input: true },
+  { scene: 'sandbox', seed: 1337, ticks: 3600, input: true },
+  { scene: 'sandbox', seed: 99, ticks: 36000, input: true },
 ];
 
 function run(c: GoldenCase): string {

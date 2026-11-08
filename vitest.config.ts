@@ -14,6 +14,11 @@ export default defineConfig({
         'src/infrastructure/browser/**',
         'src/presentation/**',
         'src/headless/cli.ts',
+        // WebGL/DOM-bound rendering: exercised by the Playwright visual suite (e2e/visual.spec.ts).
+        'src/infrastructure/render/{bodycam-presenter,profiler,budgets,quality}.ts',
+        'src/infrastructure/render/{gl,scene,textures,postfx/effects}/**',
+        'src/infrastructure/render/postfx/{pipeline,simple-pass,tonemap,types}.ts',
+        'src/infrastructure/render/osd/osd-canvas.ts',
       ],
       // Branch thresholds are lower than line thresholds because every typed-array
       // read needs a `?? 0` fallback under noUncheckedIndexedAccess, and v8 counts

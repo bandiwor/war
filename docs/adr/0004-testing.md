@@ -24,3 +24,11 @@ Golden files change only through `npm run golden:update`, and the diff is review
 `npm run ci` runs every gate locally; `.github/workflows/ci.yml` runs the same plus e2e. A
 pre-commit hook (`.githooks/pre-commit`, set up by `npm install`) runs typecheck, lint, format and
 unit tests.
+
+## Amendment (stage 1)
+
+WebGL-bound modules (`infrastructure/render` shaders, presenter, scene and texture upload) are
+excluded from unit coverage. They are covered by `e2e/visual.spec.ts`: every effect is rendered in
+isolation and must change the image, and full-stack scenes are compared against baselines. Pure
+render logic (render graph, signal-loss scheduler, ring buffer, OSD formatting, camera rig) stays
+under unit coverage.

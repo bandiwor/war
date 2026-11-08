@@ -8,8 +8,9 @@ animals) and a story told through found logs, radio chatter and camera recording
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 0, skeleton.** Deterministic ECS, fixed-step loop, replays, headless runner,
-> lint-enforced layers, and a debug panel. See [the plan](#roadmap).
+> Status: **stage 1, rendering and bodycam.** A procedural night street (PBR materials baked from
+> seeds in Web Workers), a flashlight, and a 15-module bodycam post stack driven by gameplay stimulus,
+> all toggleable from the debug menu. See [the plan](#roadmap).
 
 ## Quick start
 
@@ -21,8 +22,19 @@ npm install
 npm run dev
 ```
 
-Open the printed URL. Press <kbd>~</kbd> for the debug menu (dev builds only). Add `?seed=N` to the
-URL to choose the world seed.
+Open the printed URL and click to capture the mouse.
+
+| Input        | Action                                                  |
+| ------------ | ------------------------------------------------------- |
+| Mouse        | Look                                                    |
+| W A S D      | Walk                                                    |
+| Shift        | Sprint                                                  |
+| F            | Flashlight on/off (drains the battery shown in the OSD) |
+| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam    |
+
+Useful URL options (see `src/presentation/url-options.ts`): `?seed=N`, `?quality=low|medium|high`,
+`?fx=none|all|bloom,vignette`, and `?stim=damage:0.5,fear:0.3,emi:0.8` to preview the look reacting to
+gameplay.
 
 ```bash
 npm run headless -- --seed 42 --ticks 216000
@@ -51,10 +63,14 @@ That simulates one hour of game time in Node and prints the state hash and throu
 Layers: `domain → application → infrastructure → presentation`, plus a `headless` root. See
 [docs/architecture.md](docs/architecture.md) and the [ADRs](docs/adr/README.md).
 
+Guides: [add a system](docs/guides/adding-a-system.md) ·
+[add a bodycam effect](docs/guides/adding-an-effect.md) ·
+[add a material](docs/guides/adding-a-material.md).
+
 ## Roadmap
 
 0. ✅ Skeleton: strict TS, lint, tests, CI, deterministic PRNG and fixed-step loop
-1. Rendering and bodycam post-processing
+1. ✅ Rendering and bodycam post-processing
 2. Physics and player controller, input replays
 3. Procedural audio engine
 4. Weapons

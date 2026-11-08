@@ -146,3 +146,8 @@ export class ComponentStore<S extends Schema = Schema> {
     this.sparse = sparse;
   }
 }
+
+/** Typed-array read with the `noUncheckedIndexedAccess` fallback in one place (JIT inlines it). */
+export function at(arr: ArrayLike<number>, i: number): number {
+  return arr[i] ?? 0;
+}

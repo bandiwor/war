@@ -2,7 +2,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
-  build: { target: 'es2023', sourcemap: true },
+  // Three.js dominates the bundle (~190 kB gzip). Stage 10 revisits splitting.
+  build: { target: 'es2023', sourcemap: true, chunkSizeWarningLimit: 900 },
   server: {
     // Cross-origin isolation enables SharedArrayBuffer for worker pipelines (later stages).
     headers: {

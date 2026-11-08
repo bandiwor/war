@@ -18,11 +18,13 @@ export const PlayerIntent = defineComponent('PlayerIntent', {
   yaw: 'f64',
   pitch: 'f64',
   buttons: 'u32',
+  /** Buttons that went down this tick (press edges). */
+  pressed: 'u32',
 });
 
 export const TICK_RATE = 60;
 
-function intentSystem(player: EntityId): System<SimContext> {
+export function intentSystem(player: EntityId): System<SimContext> {
   return {
     name: 'input.intent',
     run(ctx) {
@@ -30,6 +32,7 @@ function intentSystem(player: EntityId): System<SimContext> {
       const row = store.rowOf(player);
       if (row < 0) return;
       const f = store.fields;
+      const before = f.buttons[row] ?? 0;
       const commands = ctx.commands;
       for (let i = 0; i < commands.length; i++) {
         const cmd = commands[i];
@@ -53,6 +56,7 @@ function intentSystem(player: EntityId): System<SimContext> {
             assertNever(cmd, 'input command');
         }
       }
+      f.pressed[row] = (f.buttons[row] ?? 0) & ~before;
     },
   };
 }

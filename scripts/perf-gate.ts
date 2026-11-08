@@ -7,13 +7,14 @@ import { readFileSync } from 'node:fs';
 import { PerformanceObserver, constants, performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { createEmptyWorld } from '../src/application/scenes/empty-world';
+import { createSandbox } from '../src/application/scenes/sandbox';
 import type { Simulation } from '../src/application/simulation';
 import { seed } from '../src/domain/core/brand';
 import { createChurnWorld } from '../tests/fixtures/churn-world';
 
 const Budget = z.object({ minTicksPerSecond: z.number(), maxMinorGcPerMillionTicks: z.number() });
 const budgets = z
-  .object({ emptyWorld: Budget, churnWorld: Budget })
+  .object({ emptyWorld: Budget, churnWorld: Budget, sandbox: Budget })
   .parse(JSON.parse(readFileSync(new URL('../perf-budgets.json', import.meta.url), 'utf8')));
 
 let minorGcs = 0;
@@ -25,6 +26,16 @@ const observer = new PerformanceObserver((list) => {
   }
 });
 observer.observe({ entryTypes: ['gc'] });
+
+/** Sandbox with the player walking and the flashlight on: exercises movement, dmath and battery drain. */
+function walkingSandbox(): Simulation {
+  const sim = createSandbox(seed(1)).simulation;
+  sim.step([
+    { type: 'move', forward: 1, strafe: 0.3 },
+    { type: 'look', yaw: 0.01, pitch: 0 },
+  ]);
+  return sim;
+}
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -51,12 +62,14 @@ async function measure(
 const results = {
   emptyWorld: await measure('emptyWorld', createEmptyWorld(seed(1)).simulation, 2_000_000),
   churnWorld: await measure('churnWorld', createChurnWorld(seed(1)), 200_000),
+  sandbox: await measure('sandbox', walkingSandbox(), 1_000_000),
 };
 observer.disconnect();
 
 let failed = false;
-for (const [name, r] of Object.entries(results)) {
-  const b = name === 'emptyWorld' ? budgets.emptyWorld : budgets.churnWorld;
+for (const name of ['emptyWorld', 'churnWorld', 'sandbox'] as const) {
+  const r = results[name];
+  const b = budgets[name];
   if (r.tps < b.minTicksPerSecond) {
     console.error(`FAIL ${name}: ${String(r.tps)} ticks/s < ${String(b.minTicksPerSecond)}`);
     failed = true;

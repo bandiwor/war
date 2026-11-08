@@ -1,5 +1,6 @@
 {
   "$comment": "CI performance gates. Thresholds are deliberately conservative for shared CI runners.",
   "emptyWorld": { "minTicksPerSecond": 2000000, "maxMinorGcPerMillionTicks": 2 },
-  "churnWorld": { "minTicksPerSecond": 20000, "maxMinorGcPerMillionTicks": 40 }
+  "churnWorld": { "minTicksPerSecond": 20000, "maxMinorGcPerMillionTicks": 40 },
+  "sandbox": { "minTicksPerSecond": 500000, "maxMinorGcPerMillionTicks": 2 }
 }

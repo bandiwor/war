@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TB
   subgraph presentation["presentation (browser composition root, UI, debug menu)"]
-    main[main.ts] --> osd[OsdPresenter]
+    main[main.ts]
     main --> debug[debug/ — DEV only, tree-shaken]
   end
   subgraph headless["headless (Node composition root)"]
@@ -12,6 +12,7 @@ flowchart TB
   subgraph infrastructure["infrastructure (adapters)"]
     raf[RafFrameSource]
     kbd[KeyboardMouseInput]
+    rend[BodycamPresenter: render graph · post effects · workers]
   end
   subgraph application["application (use cases, ports)"]
     loop[GameLoop + FixedStepAccumulator]
@@ -23,13 +24,14 @@ flowchart TB
   subgraph domain["domain (pure, deterministic)"]
     ecs[ECS: entities · SoA stores · schedule]
     math[sfc32 Rng streams · StateHasher · dmath]
+    data[registries: materials · bodycam effects · layouts]
     input[InputCommand schema]
   end
   presentation --> infrastructure --> application --> domain
   headless --> application
   raf -. implements .-> ports
   kbd -. implements .-> ports
-  osd -. implements .-> ports
+  rend -. implements .-> ports
 ```
 
 ## Frame flow
@@ -50,6 +52,10 @@ Replays record exactly the per-tick commands from step 3, so playback in Node re
 | `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`      |
 | `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule` |
 | `src/domain/input`           | `InputCommand` discriminated union + Zod schema               |
+| `src/domain/procgen`         | Tileable noise, material recipe registry, texture baker       |
+| `src/domain/bodycam`         | Bodycam effect registry, gameplay stimulus modulation         |
+| `src/domain/world`           | Street layout generator (shared by render, later physics/nav) |
+| `src/infrastructure/render`  | WebGL presenter, render graph, post pipeline, effects, scene  |
 | `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`                   |
 | `src/infrastructure/browser` | rAF frame source, keyboard/mouse input                        |
 | `src/presentation`           | Browser composition root, OSD, `debug/`                       |

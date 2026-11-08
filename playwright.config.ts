@@ -9,7 +9,9 @@ export default defineConfig({
   retries: 0,
   reporter: process.env['CI'] ? 'github' : 'list',
   use: { baseURL: `http://localhost:${String(PORT)}`, trace: 'off' },
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01 } },
+  // Software (SwiftShader) and GPU rasterizers differ slightly; 1% of pixels may drift.
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01, threshold: 0.15 } },
+  timeout: 120_000,
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Dev server so DEV-only debug tooling is available to tests.
   webServer: {

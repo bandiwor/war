@@ -24,6 +24,9 @@ export const PlayerIntent = defineComponent('PlayerIntent', {
 
 export const TICK_RATE = 60;
 
+/** Slot requested this tick via a `select` command (−1 = none). Only scenes with weapons register it. */
+export const SelectIntent = defineComponent('SelectIntent', { slot: 'i32' });
+
 export function intentSystem(player: EntityId): System<SimContext> {
   return {
     name: 'input.intent',
@@ -33,6 +36,9 @@ export function intentSystem(player: EntityId): System<SimContext> {
       if (row < 0) return;
       const f = store.fields;
       const before = f.buttons[row] ?? 0;
+      const select = ctx.world.tryStore(SelectIntent);
+      const srow = select === null ? -1 : select.rowOf(player);
+      if (select !== null && srow >= 0) select.fields.slot[srow] = -1;
       const commands = ctx.commands;
       for (let i = 0; i < commands.length; i++) {
         const cmd = commands[i];
@@ -52,6 +58,9 @@ export function intentSystem(player: EntityId): System<SimContext> {
             f.buttons[row] = cmd.pressed ? prev | bit : prev & ~bit;
             break;
           }
+          case 'select':
+            if (select !== null && srow >= 0) select.fields.slot[srow] = cmd.slot;
+            break;
           default:
             assertNever(cmd, 'input command');
         }

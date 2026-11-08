@@ -2,6 +2,8 @@ import type { ReplayRecorder } from '../application/replay/replay';
 import { formatReplay, parseReplay, type Replay } from '../application/replay/replay';
 import type { Sandbox } from '../application/scenes/sandbox';
 import type { SoundscapeDirector } from '../application/audio/soundscape-director';
+import type { CommandQueue } from '../application/replay/command-queue';
+import type { CombatLog } from './combat-log';
 import type { AudioEngine } from '../infrastructure/audio/audio-engine';
 import type { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 
@@ -20,6 +22,9 @@ export interface GameSession {
   readonly audio: AudioEngine | null;
   readonly footsteps: FootstepPlayer | null;
   readonly director: SoundscapeDirector | null;
+  readonly combat: CombatLog;
+  /** Inject input commands into the next tick (debug tools); null in playback/visual modes. */
+  readonly commands: CommandQueue | null;
   footstepCount: number;
 }
 

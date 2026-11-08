@@ -64,6 +64,65 @@ export interface JumpEvent {
   surface: SurfaceId;
 }
 
+export interface ShotEvent {
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dy: number;
+  dz: number;
+  /** Index into WEAPON_IDS. */
+  weapon: number;
+  suppressed: boolean;
+}
+
+export interface HitEvent {
+  x: number;
+  y: number;
+  z: number;
+  /** Target entity (packed id). */
+  target: number;
+  race: number;
+  /** Index into BODY_PARTS, or −1 for area damage. */
+  part: number;
+  damage: number;
+  killed: boolean;
+  /** Distance the projectile travelled (m). */
+  distance: number;
+  /** Projectile drop below the launch line at impact (m); 0 for non-ballistic hits. */
+  drop: number;
+  /** Flight time (s). */
+  time: number;
+  weapon: number;
+}
+
+export interface ImpactEvent {
+  x: number;
+  y: number;
+  z: number;
+  nx: number;
+  ny: number;
+  nz: number;
+  surface: SurfaceId;
+  /** 0..1 energy (bullet ≈ 1, pellet ≈ 0.4, melee ≈ 0.6). */
+  energy: number;
+}
+
+export interface ExplosionEvent {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  /** 0 = frag, 1 = EMP, 2 = fire ignition, 3 = flare ignition. */
+  kind: number;
+}
+
+/** Weapon mechanics for sound and animation (WeaponEvent bit flags). */
+export interface WeaponFxEvent {
+  weapon: number;
+  flags: number;
+}
+
 export class GameEvents {
   readonly footstep = new EventChannel<FootstepEvent>(() => ({
     x: 0,
@@ -83,10 +142,57 @@ export class GameEvents {
     noiseRadius: 0,
   }));
   readonly jump = new EventChannel<JumpEvent>(() => ({ x: 0, y: 0, z: 0, surface: 'concrete' }));
+  readonly shot = new EventChannel<ShotEvent>(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    dx: 0,
+    dy: 0,
+    dz: 0,
+    weapon: 0,
+    suppressed: false,
+  }));
+  readonly hit = new EventChannel<HitEvent>(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    target: 0,
+    race: 0,
+    part: -1,
+    damage: 0,
+    killed: false,
+    distance: 0,
+    drop: 0,
+    time: 0,
+    weapon: 0,
+  }));
+  readonly impact = new EventChannel<ImpactEvent>(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    nx: 0,
+    ny: 1,
+    nz: 0,
+    surface: 'concrete',
+    energy: 0,
+  }));
+  readonly explosion = new EventChannel<ExplosionEvent>(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    radius: 0,
+    kind: 0,
+  }));
+  readonly weaponFx = new EventChannel<WeaponFxEvent>(() => ({ weapon: 0, flags: 0 }));
 
   clear(): void {
     this.footstep.clear();
     this.land.clear();
     this.jump.clear();
+    this.shot.clear();
+    this.hit.clear();
+    this.impact.clear();
+    this.explosion.clear();
+    this.weaponFx.clear();
   }
 }

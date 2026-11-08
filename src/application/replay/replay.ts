@@ -10,7 +10,7 @@ import type { Simulation } from '../simulation';
 export const REPLAY_VERSION = 2;
 
 /** Scenes a replay can target; playback refuses to run a replay on the wrong scene. */
-export const REPLAY_SCENES = ['empty', 'sandbox'] as const;
+export const REPLAY_SCENES = ['empty', 'sandbox', 'range'] as const;
 export type ReplayScene = (typeof REPLAY_SCENES)[number];
 
 const Frames = z.array(

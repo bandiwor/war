@@ -14,6 +14,10 @@ export const ACTIONS = [
   'sprint',
   'use',
   'flashlight',
+  // Appended (never reorder: replays store action bits by index).
+  'fireMode',
+  'nextWeapon',
+  'prevWeapon',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -25,6 +29,8 @@ export const InputCommandSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('look'), yaw: z.number(), pitch: z.number() }),
   z.object({ type: z.literal('action'), action: z.enum(ACTIONS), pressed: z.boolean() }),
+  /** Select a loadout slot directly (number keys). */
+  z.object({ type: z.literal('select'), slot: z.number().int().min(0).max(9) }),
 ]);
 
 export type InputCommand = z.infer<typeof InputCommandSchema>;

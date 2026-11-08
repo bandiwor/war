@@ -5,12 +5,15 @@ import { SoundscapeDirector } from '../application/audio/soundscape-director';
 import { ReplayRecorder } from '../application/replay/replay';
 import { RecordingInput, ReplayInput } from '../application/replay/replay-input';
 import { TICK_RATE } from '../application/scenes/empty-world';
-import { createSandbox, type Sandbox } from '../application/scenes/sandbox';
+import { createSandbox, type Sandbox, type SandboxKind } from '../application/scenes/sandbox';
+import { CommandQueue } from '../application/replay/command-queue';
+import { CombatLog } from './combat-log';
 import type { Simulation } from '../application/simulation';
 import { seed } from '../domain/core/brand';
 import type { InputCommand } from '../domain/input/commands';
 import { AudioEngine } from '../infrastructure/audio/audio-engine';
 import { FootstepPlayer } from '../infrastructure/audio/footstep-player';
+import { WeaponAudio } from '../infrastructure/audio/weapon-audio';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
 import { createRapierPhysics } from '../infrastructure/physics/rapier-physics';
@@ -35,10 +38,12 @@ async function bootstrap(): Promise<void> {
   root.append(status);
 
   const playing = opts.replay === 'session' ? loadSessionReplay() : null;
-  if (playing !== null && playing.scene !== 'sandbox')
-    throw new Error(`Replay is for scene "${playing.scene}"`);
+  if (playing !== null && playing.scene === 'empty')
+    throw new Error('Empty-world replays have no renderable scene');
+  const kind: SandboxKind =
+    playing !== null ? (playing.scene === 'range' ? 'range' : 'street') : opts.scene;
   const runSeed = seed(playing?.seed ?? opts.seed);
-  const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE));
+  const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE), { kind });
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
   canvas.dataset['testid'] = 'view';
@@ -82,6 +87,12 @@ async function bootstrap(): Promise<void> {
   const director =
     audio === null ? null : new SoundscapeDirector(sandbox.layout, sandbox.physics, audio, runSeed);
   const footsteps = audio === null ? null : new FootstepPlayer(audio, runSeed);
+  const weaponAudio = audio === null ? null : new WeaponAudio(audio, runSeed);
+  if (weaponAudio !== null) {
+    presenter.combatFx.onCasingLanded = (x, y, z, shell) => {
+      weaponAudio.casingLanded(x, y, z, shell);
+    };
+  }
   if (audio !== null) {
     const unlock = (): void => {
       audio.unlock();
@@ -92,6 +103,7 @@ async function bootstrap(): Promise<void> {
 
   let input: InputSource;
   let recorder: ReplayRecorder | null = null;
+  let commands: CommandQueue | null = null;
   if (playing !== null) {
     input = new ReplayInput(playing);
   } else if (opts.benchSeconds > 0) {
@@ -105,18 +117,34 @@ async function bootstrap(): Promise<void> {
       void canvas.requestPointerLock();
     });
     // Black box: every live session records its input from tick 0.
-    const recording = new RecordingInput(keyboard);
-    recorder = new ReplayRecorder('sandbox', runSeed, TICK_RATE, TICK_RATE);
+    // Debug tools inject through the queue, before recording: injected commands are replayable.
+    commands = new CommandQueue(keyboard);
+    const recording = new RecordingInput(commands);
+    recorder = new ReplayRecorder(
+      kind === 'range' ? 'range' : 'sandbox',
+      runSeed,
+      TICK_RATE,
+      TICK_RATE,
+    );
     recording.recorder = recorder;
     input = recording;
   }
 
-  const session = newSession(sandbox, recorder, playing, audio, footsteps, director);
+  const session = newSession(sandbox, recorder, playing, audio, footsteps, director, commands);
   const onTick = (s: Simulation): void => {
     markTick();
     recorder?.afterStep(s);
     const events = s.events;
     session.footstepCount += events.footstep.size;
+    presenter.consumeEvents(events);
+    if (weaponAudio !== null) {
+      const v = presenter.view;
+      weaponAudio.hands.x = v.x;
+      weaponAudio.hands.y = v.y - 0.4;
+      weaponAudio.hands.z = v.z;
+      weaponAudio.consume(events);
+    }
+    session.combat.record(events);
     if (footsteps !== null) {
       for (let i = 0; i < events.footstep.size; i++) {
         const e = events.footstep.at(i);
@@ -165,8 +193,19 @@ function newSession(
   audio: AudioEngine | null = null,
   footsteps: FootstepPlayer | null = null,
   director: SoundscapeDirector | null = null,
+  commands: CommandQueue | null = null,
 ): GameSession {
-  return { sandbox, recorder, playing, audio, footsteps, director, footstepCount: 0 };
+  return {
+    sandbox,
+    recorder,
+    playing,
+    audio,
+    footsteps,
+    director,
+    commands,
+    combat: new CombatLog(),
+    footstepCount: 0,
+  };
 }
 
 function createAudio(runSeed: number): AudioEngine | null {

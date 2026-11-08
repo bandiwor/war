@@ -60,7 +60,7 @@ export class SoundscapeDirector {
   private readonly rng: Rng;
   private readonly directions = probeDirections();
   private readonly hits: ProbeHit[];
-  private readonly hit: RayHit = { distance: 0, surface: null };
+  private readonly hit: RayHit = { distance: 0, surface: null, nx: 0, ny: 0, nz: 0 };
   private readonly origin: Point = { x: 0, y: 0, z: 0 };
   private readonly dir: Point = { x: 0, y: 0, z: 0 };
   private probeTimer = 0;

@@ -26,6 +26,10 @@ export interface Point {
 export interface RayHit {
   distance: number;
   surface: SurfaceId | null;
+  /** Surface normal at the hit. */
+  nx: number;
+  ny: number;
+  nz: number;
 }
 
 export interface CharacterSpec {

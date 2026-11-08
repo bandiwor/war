@@ -182,7 +182,7 @@ export class RapierPhysics implements PhysicsPort {
     this.probe.origin = { x: origin.x, y: origin.y, z: origin.z };
     this.probe.dir = { x: dir.x, y: dir.y, z: dir.z };
     // Characters and surface-less blockers are acoustically transparent.
-    const hit = this.world.castRay(
+    const hit = this.world.castRayAndGetNormal(
       this.probe,
       maxDistance,
       true,
@@ -195,6 +195,9 @@ export class RapierPhysics implements PhysicsPort {
     if (hit === null) return false;
     out.distance = hit.timeOfImpact;
     out.surface = this.surfaces.get(hit.collider.handle) ?? null;
+    out.nx = hit.normal.x;
+    out.ny = hit.normal.y;
+    out.nz = hit.normal.z;
     return true;
   }
 

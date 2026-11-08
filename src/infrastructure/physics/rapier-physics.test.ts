@@ -93,10 +93,11 @@ describe('RapierPhysics', () => {
     p.addStaticBox([5, 1, 0], [1, 2, 4], 0, 'wood'); // face at x = 4.5
     p.addStaticBox([-3, 1, 0], [1, 2, 4], 0, null); // invisible blocker
     p.createCharacter({ ...spec, feet: [2, 0, 0] }); // standing in the way
-    const hit: RayHit = { distance: 0, surface: null };
+    const hit: RayHit = { distance: 0, surface: null, nx: 0, ny: 0, nz: 0 };
     expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, 20, hit)).toBe(true);
     expect(hit.distance).toBeCloseTo(4.5, 3);
     expect(hit.surface).toBe('wood');
+    expect(hit.nx).toBeCloseTo(-1);
     expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: -1, y: 0, z: 0 }, 20, hit)).toBe(false);
     expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }, 20, hit)).toBe(true);
     expect(hit.surface).toBe('asphalt');

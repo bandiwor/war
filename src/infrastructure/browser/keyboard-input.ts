@@ -9,6 +9,21 @@ const KEY_ACTIONS: Readonly<Record<string, Action>> = {
   ShiftLeft: 'sprint',
   KeyE: 'use',
   KeyF: 'flashlight',
+  KeyB: 'fireMode',
+};
+
+/** Number row selects loadout slots 1–9, 0. */
+const SLOT_KEYS: Readonly<Record<string, number>> = {
+  Digit1: 0,
+  Digit2: 1,
+  Digit3: 2,
+  Digit4: 3,
+  Digit5: 4,
+  Digit6: 5,
+  Digit7: 6,
+  Digit8: 7,
+  Digit9: 8,
+  Digit0: 9,
 };
 
 /**
@@ -18,6 +33,7 @@ const KEY_ACTIONS: Readonly<Record<string, Action>> = {
 export class KeyboardMouseInput implements InputSource {
   private readonly held = new Set<string>();
   private readonly pending: InputCommand[] = [];
+  private readonly releaseNext: InputCommand[] = [];
   private lookYaw = 0;
   private lookPitch = 0;
   private lastForward = 0;
@@ -47,6 +63,8 @@ export class KeyboardMouseInput implements InputSource {
     target.addEventListener(
       'mousemove',
       (e) => {
+        // Only a captured mouse looks around: a free cursor crossing the canvas must not turn the camera.
+        if (document.pointerLockElement !== target) return;
         this.lookYaw -= e.movementX * this.sensitivity;
         this.lookPitch -= e.movementY * this.sensitivity;
       },
@@ -89,6 +107,8 @@ export class KeyboardMouseInput implements InputSource {
     }
     for (const cmd of this.pending) out.push(cmd);
     this.pending.length = 0;
+    for (const cmd of this.releaseNext) this.pending.push(cmd);
+    this.releaseNext.length = 0;
     return out;
   }
 
@@ -98,6 +118,8 @@ export class KeyboardMouseInput implements InputSource {
     else this.held.delete(code);
     const action = KEY_ACTIONS[code];
     if (action !== undefined) this.pending.push({ type: 'action', action, pressed: down });
+    const slot = SLOT_KEYS[code];
+    if (down && slot !== undefined) this.pending.push({ type: 'select', slot });
   }
 
   private onButton(button: number, down: boolean): void {

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { ComponentStore, defineComponent } from './component';
 import { EntityAllocator, makeEntityId } from './entity';
 
-const Kinds = defineComponent('Kinds', { a: 'f32', b: 'f64', c: 'i32', d: 'u32', e: 'u8' });
+const Kinds = defineComponent('Kinds', {
+  a: 'f32',
+  b: 'f64',
+  c: 'i32',
+  d: 'u32',
+  e: 'u8',
+  g: 'u16',
+});
 
 describe('ComponentStore', () => {
   it('rejects empty schemas and freezes defs', () => {
@@ -17,7 +24,8 @@ describe('ComponentStore', () => {
     expect(s.fields.c).toBeInstanceOf(Int32Array);
     expect(s.fields.d).toBeInstanceOf(Uint32Array);
     expect(s.fields.e).toBeInstanceOf(Uint8Array);
-    expect(s.fieldNamesInOrder()).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(s.fields.g).toBeInstanceOf(Uint16Array);
+    expect(s.fieldNamesInOrder()).toEqual(['a', 'b', 'c', 'd', 'e', 'g']);
   });
 
   it('adds zeroed rows, is idempotent, swap-removes', () => {

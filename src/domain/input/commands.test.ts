@@ -19,6 +19,8 @@ describe('InputCommand', () => {
       InputCommandSchema.safeParse({ type: 'action', action: 'dance', pressed: true }).success,
     ).toBe(false);
     expect(InputCommandSchema.safeParse({ type: 'teleport' }).success).toBe(false);
+    expect(InputCommandSchema.safeParse({ type: 'select', slot: 3 }).success).toBe(true);
+    expect(InputCommandSchema.safeParse({ type: 'select', slot: 12 }).success).toBe(false);
   });
 
   it('assigns a unique bit per action', () => {

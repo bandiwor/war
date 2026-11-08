@@ -21,6 +21,8 @@ describe('World', () => {
     expect(w.store(Pos)).toBe(pos);
     expect(() => w.register(Pos)).toThrow('already registered');
     expect(() => w.store(Hp)).toThrow('not registered');
+    expect(w.tryStore(Hp)).toBeNull();
+    expect(w.tryStore(Pos)).toBe(pos);
     w.register(Hp);
     expect(w.componentNames()).toEqual(['Pos', 'Hp']);
   });

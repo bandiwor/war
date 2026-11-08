@@ -8,7 +8,9 @@ animals) and a story told through found logs, radio chatter and camera recording
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 3, audio.** A procedural soundscape in an AudioWorklet (wind, hum, insects, drips,
+> Status: **stage 4, weapons.** Registry-driven firearms, melee and throwables with drag ballistics,
+> chamber-aware reloads, jams, recoil patterns, per-race hit zones, synthesized gunshots, and a
+> debug shooting range (`/?scene=range`). Previously: **stage 3, audio.** A procedural soundscape in an AudioWorklet (wind, hum, insects, drips,
 > creaks, rumble…) that changes with zone, night, danger and health, reverb computed from the
 > surrounding geometry, occlusion, and distant events (feral dogs, sirens, robot radio).
 > Previously: **stage 2, physics and player.** A Rapier-driven first-person body (walk, sprint with
@@ -29,15 +31,19 @@ npm run dev
 
 Open the printed URL and click to capture the mouse.
 
-| Input        | Action                                                  |
-| ------------ | ------------------------------------------------------- |
-| Mouse        | Look                                                    |
-| W A S D      | Walk                                                    |
-| Shift        | Sprint (drains stamina)                                 |
-| Space        | Jump                                                    |
-| Left Ctrl    | Crouch (hold; you stay down under low ceilings)         |
-| F            | Flashlight on/off (drains the battery shown in the OSD) |
-| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam    |
+| Input        | Action                                                   |
+| ------------ | -------------------------------------------------------- |
+| Mouse        | Look                                                     |
+| W A S D      | Walk                                                     |
+| Shift        | Sprint (drains stamina)                                  |
+| Space        | Jump                                                     |
+| Left mouse   | Fire / swing / throw                                     |
+| Right mouse  | Aim down sights (rifle: 6× optic)                        |
+| R            | Reload (also clears a jam)                               |
+| 1–9, 0       | Select weapon slot; mouse wheel / B for next / fire mode |
+| Left Ctrl    | Crouch (hold; you stay down under low ceilings)          |
+| F            | Flashlight on/off (drains the battery shown in the OSD)  |
+| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam     |
 
 Useful URL options (see `src/presentation/url-options.ts`): `?seed=N`, `?quality=low|medium|high`,
 `?fx=none|all|bloom,vignette`, and `?stim=damage:0.5,fear:0.3,emi:0.8` to preview the look reacting to
@@ -73,7 +79,8 @@ Layers: `domain → application → infrastructure → presentation`, plus a `he
 Guides: [add a system](docs/guides/adding-a-system.md) ·
 [add a bodycam effect](docs/guides/adding-an-effect.md) ·
 [add a material](docs/guides/adding-a-material.md) ·
-[add a zone soundscape](docs/guides/adding-a-zone-soundscape.md).
+[add a zone soundscape](docs/guides/adding-a-zone-soundscape.md) ·
+[add a weapon](docs/guides/adding-a-weapon.md).
 
 ## Roadmap
 
@@ -81,7 +88,7 @@ Guides: [add a system](docs/guides/adding-a-system.md) ·
 1. ✅ Rendering and bodycam post-processing
 2. ✅ Physics and player controller, input replays
 3. ✅ Procedural audio engine
-4. Weapons
+4. ✅ Weapons
 5. World streaming, time of day, weather
 6. AI core, bestiary, HMR
 7. Races: zombies → animals → plants → robots

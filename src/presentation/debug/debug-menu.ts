@@ -14,6 +14,9 @@ import { downloadReplay, playReplayFile, type GameSession } from '../session';
 import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
 import { DISTANT_KINDS, ZONE_IDS, ZONE_SOUNDSCAPES, isZoneId } from '../../domain/audio/zones';
 import { LAYER_IDS, type LayerId } from '../../infrastructure/audio/dsp/ambience-renderer';
+import { resetTargets } from '../../application/combat/combat-systems';
+import { WEAPON_IDS } from '../../domain/weapons/registry';
+import type { HitRecord } from '../combat-log';
 import { el, slider, sparkline } from './widgets';
 
 /** Marker string checked by scripts/check-bundle.mjs to prove tree-shaking. */
@@ -47,6 +50,29 @@ export interface WarDebugApi {
   };
   setColliders(enabled: boolean): void;
   pauseAtTick(tick: number): void;
+  selectWeapon(id: string): boolean;
+  /** Turn the view so the sight line points at a world position. */
+  aimAt(x: number, y: number, z: number): void;
+  /** Press and release fire (optionally holding aim) on the next ticks. */
+  fire(ads?: boolean): void;
+  setPaths(show: boolean): void;
+  resetTargets(): void;
+  combatLog(): {
+    shots: number;
+    hits: number;
+    kills: number;
+    impacts: number;
+    explosions: number;
+    recent: readonly HitRecord[];
+  };
+  weaponState(): {
+    id: string | null;
+    phase: string;
+    mag: number;
+    chambered: boolean;
+    reserve: number;
+    wear: number;
+  };
   setZone(zone: string | null): boolean;
   setAudioOverride(key: OverrideKey, value: number | null): void;
   audioStats(): {
@@ -265,6 +291,54 @@ export function installDebugMenu({
     setAll(false);
   });
 
+  // --- Range ----------------------------------------------------------------
+  const rangeTab = addSection('Range');
+  const weaponInfo = el('pre');
+  const hitTable = el('pre');
+  const queue = session.commands;
+  const selectWeapon = (id: string): boolean => {
+    const slot = WEAPON_IDS.findIndex((w) => w === id);
+    if (slot < 0 || queue === null) return false;
+    queue.push({ type: 'select', slot });
+    return true;
+  };
+  const weaponButtons = el('div');
+  for (const id of WEAPON_IDS) {
+    const b = el('button', '', id);
+    b.type = 'button';
+    b.dataset['weapon'] = id;
+    b.addEventListener('click', () => {
+      selectWeapon(id);
+    });
+    weaponButtons.append(b);
+  }
+  const paths = el('input');
+  paths.type = 'checkbox';
+  paths.addEventListener('change', () => {
+    presenter.combatFx.showPaths = paths.checked;
+  });
+  const pathLabel = el('label', '', ' bullet paths');
+  pathLabel.prepend(paths);
+  const resetBtn = el('button', '', 'Reset targets');
+  resetBtn.type = 'button';
+  resetBtn.addEventListener('click', () => {
+    resetTargets(simulation.world);
+  });
+  const openRange = el(
+    'button',
+    '',
+    session.sandbox.kind === 'range' ? 'Back to street' : 'Open shooting range',
+  );
+  openRange.type = 'button';
+  openRange.addEventListener('click', () => {
+    const url = new URL(window.location.href);
+    if (session.sandbox.kind === 'range') url.searchParams.delete('scene');
+    else url.searchParams.set('scene', 'range');
+    url.searchParams.delete('replay');
+    window.location.href = url.toString();
+  });
+  rangeTab.append(weaponInfo, weaponButtons, pathLabel, el('br'), resetBtn, openRange, hitTable);
+
   // --- Audio ----------------------------------------------------------------
   const audioTab = addSection('Audio');
   const audioInfo = el('pre');
@@ -412,6 +486,51 @@ export function installDebugMenu({
         heartbeat: director.mix.heartbeat.gain,
       };
     },
+    selectWeapon,
+    aimAt(x, y, z) {
+      const v = presenter.view;
+      const yaw = Math.atan2(-(x - v.x), -(z - v.z));
+      const pitch = Math.atan2(y - v.y, Math.hypot(x - v.x, z - v.z));
+      queue?.push({ type: 'look', yaw: yaw - v.yaw, pitch: pitch - v.pitch });
+    },
+    fire(ads = true) {
+      if (queue === null) return;
+      if (ads) queue.push({ type: 'action', action: 'aim', pressed: true });
+      queue.push(
+        { type: 'action', action: 'fire', pressed: true },
+        { type: 'action', action: 'fire', pressed: false },
+      );
+      if (ads) queue.push({ type: 'action', action: 'aim', pressed: false });
+    },
+    setPaths(show) {
+      paths.checked = show;
+      presenter.combatFx.showPaths = show;
+    },
+    resetTargets() {
+      resetTargets(simulation.world);
+    },
+    combatLog() {
+      const c = session.combat;
+      return {
+        shots: c.shots,
+        hits: c.hits,
+        kills: c.kills,
+        impacts: c.impacts,
+        explosions: c.explosions,
+        recent: [...c.recent],
+      };
+    },
+    weaponState() {
+      const w = presenter.view.weapon;
+      return {
+        id: w.id,
+        phase: w.phase,
+        mag: w.mag,
+        chambered: w.chambered,
+        reserve: w.reserve,
+        wear: w.wear,
+      };
+    },
     pauseAtTick(tick) {
       loop?.pauseAtTick(tick);
     },
@@ -452,6 +571,21 @@ export function installDebugMenu({
         `bake     ${[...presenter.bakeTimes].map(([k, v]) => `${k} ${v.toFixed(0)}ms`).join(', ')}`,
       ].join('\n');
       graph.draw(p.frameMs, FRAME_BUDGETS.frame);
+      const w = presenter.view.weapon;
+      weaponInfo.textContent = [
+        `weapon  ${w.id ?? '-'}  (${w.phase}${w.phase === 'reloading' ? ` · ${w.stage}` : ''})`,
+        `loaded  ${String(w.mag)}${w.chambered ? '+1' : ''}   reserve ${w.infinite ? '∞' : String(w.reserve)}   wear ${(w.wear * 100).toFixed(1)}%`,
+        `log     ${String(session.combat.shots)} shots · ${String(session.combat.hits)} hits · ${String(session.combat.kills)} kills`,
+      ].join('\n');
+      hitTable.textContent = [
+        'weapon    race    part     dist    dmg   drop   ToF  ',
+        ...session.combat.recent
+          .slice(0, 10)
+          .map(
+            (h) =>
+              `${h.weapon.padEnd(9)} ${h.race.padEnd(7)} ${h.part.padEnd(7)} ${h.distance.toFixed(1).padStart(6)}m ${h.damage.toFixed(0).padStart(5)} ${h.dropCm.toFixed(0).padStart(4)}cm ${h.timeMs.toFixed(0).padStart(4)}ms${h.killed ? ' ✝' : ''}`,
+          ),
+      ].join('\n');
       if (director !== null && engine !== null) {
         const a = director.acoustics;
         const zones = Object.entries(director.context.zones)

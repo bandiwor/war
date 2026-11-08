@@ -2,6 +2,7 @@ import type { Seed } from '../core/brand';
 import { Rng } from '../math/prng';
 import type { MaterialId } from '../procgen/materials';
 import type { ZoneId } from '../audio/zones';
+import type { Race } from '../combat/races';
 
 /**
  * Authored-structure + procedural-detail layout of the stage-1 test street:
@@ -56,7 +57,17 @@ export interface ZoneVolume {
   readonly max: readonly [number, number];
 }
 
+/** A shootable dummy/mob placeholder of a given race (range targets; real mobs come in stage 6). */
+export interface TargetPiece {
+  readonly race: Race;
+  readonly position: Vec3;
+  readonly yaw: number;
+}
+
+/** Layout of any playable area (street, range…). Consumed by render, physics, audio and spawns. */
 export interface StreetLayout {
+  readonly kind: 'street' | 'range';
+  readonly targets: readonly TargetPiece[];
   readonly zones: readonly ZoneVolume[];
   readonly boxes: readonly BoxPiece[];
   readonly blockers: readonly BlockerPiece[];
@@ -269,7 +280,17 @@ export function generateStreetLayout(seed: Seed): StreetLayout {
     { zone: 'industrial', min: [-60, beaconZ], max: [60, halfL + 10] },
   ];
 
+  // Placeholder bodies of each race (shootable dummies until mobs arrive in stage 6).
+  const targets: TargetPiece[] = [
+    { race: 'zombie', position: [1.5, 0, beaconZ - 3], yaw: 0 },
+    { race: 'robot', position: [-2.5, 0, beaconZ + 18], yaw: 0.4 },
+    { race: 'animal', position: [sideX + 1.2, 0, -30], yaw: -1.2 },
+    { race: 'plant', position: [-(sideX - 0.6), STREET.curbHeight, -18], yaw: 1.5 },
+  ];
+
   return {
+    kind: 'street',
+    targets,
     zones,
     boxes,
     blockers,

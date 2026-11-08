@@ -13,6 +13,7 @@ import { isQualityName, type QualityName } from '../infrastructure/render/qualit
  *   ?signal=0.8         force a signal-loss level
  *   ?bench=20           benchmark: scripted walk for N seconds, then a frame-time report
  *   ?replay=session     play back the replay stored by the debug menu (Sim tab)
+ *   ?scene=range        the debug shooting range instead of the street
  *   ?stim=damage:0.5,fear:0.2,emi:0
  */
 export interface UrlOptions {
@@ -27,6 +28,7 @@ export interface UrlOptions {
   readonly spin: number;
   readonly benchSeconds: number;
   readonly replay: 'session' | null;
+  readonly scene: 'street' | 'range';
   readonly stimulus: BodycamStimulus | null;
 }
 
@@ -62,6 +64,7 @@ export function parseUrlOptions(search: string): UrlOptions {
     spin: num(q.get('spin'), 0),
     benchSeconds: Math.max(0, num(q.get('bench'), 0)),
     replay: q.get('replay') === 'session' ? 'session' : null,
+    scene: q.get('scene') === 'range' ? 'range' : 'street',
     stimulus,
   };
 }

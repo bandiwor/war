@@ -13,6 +13,8 @@ export interface MotorInput {
   sprint: boolean;
   crouch: boolean;
   jumpPressed: boolean;
+  /** Extra speed multiplier (aiming down sights, carrying). */
+  speedScale?: number;
 }
 
 export interface MotorState {
@@ -98,7 +100,9 @@ export function stepMotor(
   }
   const sprinting =
     input.sprint && f > 0 && s.grounded && s.crouch < 0.5 && s.stamina > t.staminaMinToSprint;
-  const base = sprinting ? t.sprintSpeed : t.walkSpeed + (t.crouchSpeed - t.walkSpeed) * s.crouch;
+  const base =
+    (sprinting ? t.sprintSpeed : t.walkSpeed + (t.crouchSpeed - t.walkSpeed) * s.crouch) *
+    (input.speedScale ?? 1);
   const fwdSpeed = f >= 0 ? base * f : base * f * t.backpedalFactor;
   const sideSpeed = base * r * t.strafeFactor;
   const sy = sin(input.yaw);

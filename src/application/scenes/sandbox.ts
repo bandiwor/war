@@ -21,7 +21,31 @@ import { PLAYER_TUNING, type PlayerTuning } from '../../domain/player/tuning';
 import { Simulation, type SimContext } from '../simulation';
 import type { CharacterId, CharacterMove, PhysicsPort, Point } from '../physics/ports';
 import { buildStaticColliders } from '../physics/static-world';
-import { PlayerIntent, TICK_RATE, intentSystem } from './empty-world';
+import { PlayerIntent, SelectIntent, TICK_RATE, intentSystem } from './empty-world';
+import { generateRangeLayout } from '../../domain/world/range-layout';
+import {
+  Ammo,
+  Hazard,
+  Loadout,
+  Projectile,
+  Target,
+  Thrown,
+  WeaponItem,
+} from '../combat/components';
+import { WEAPONS, weaponAt, type WeaponId } from '../../domain/weapons/registry';
+import type { ReloadStage, WeaponPhase } from '../../domain/weapons/weapon-state';
+import {
+  activeItemRow,
+  aimOffset,
+  giveLoadout,
+  hazardSystem,
+  projectileSystem,
+  spawnTargets,
+  targetSystem,
+  thrownSystem,
+  weaponFireSystem,
+  weaponSelectSystem,
+} from '../combat/combat-systems';
 
 /**
  * Stage-2 sandbox: the test street with Rapier collision, a first-person
@@ -92,6 +116,7 @@ function motorSystem(player: EntityId, physics: PhysicsPort, t: PlayerTuning): S
   const SPRINT = actionBit('sprint');
   const CROUCH = actionBit('crouch');
   const JUMP = actionBit('jump');
+  const AIM = actionBit('aim');
 
   return {
     name: 'player.motor',
@@ -122,6 +147,8 @@ function motorSystem(player: EntityId, physics: PhysicsPort, t: PlayerTuning): S
       input.sprint = (buttons & SPRINT) !== 0;
       input.crouch = (buttons & CROUCH) !== 0;
       input.jumpPressed = (at(i.pressed, irow) & JUMP) !== 0;
+      // Aiming down sights: deliberate, slower movement.
+      input.speedScale = (buttons & AIM) !== 0 ? 0.6 : 1;
 
       stepMotor(state, input, t, ctx.dt, out);
       feedback.heightApplied = physics.setCharacterHeight(id, out.height);
@@ -182,6 +209,7 @@ function physicsStepSystem(physics: PhysicsPort): System<SimContext> {
 /** Copies the physics result into Pose and turns walked distance into footsteps. */
 function poseSystem(player: EntityId, physics: PhysicsPort, t: PlayerTuning): System<SimContext> {
   const feet: Point = { x: 0, y: 0, z: 0 };
+  const recoil = { pitch: 0, yaw: 0 };
   return {
     name: 'player.pose',
     after: ['physics.step'],
@@ -211,8 +239,9 @@ function poseSystem(player: EntityId, physics: PhysicsPort, t: PlayerTuning): Sy
       p.z[row] = feet.z;
       const crouch = at(m.crouch, mrow);
       p.eye[row] = eyeHeight(t, crouch);
-      p.yaw[row] = at(i.yaw, irow);
-      p.pitch[row] = at(i.pitch, irow);
+      aimOffset(ctx.world, player, recoil);
+      p.yaw[row] = at(i.yaw, irow) + recoil.yaw;
+      p.pitch[row] = Math.max(-1.5, Math.min(1.5, at(i.pitch, irow) + recoil.pitch));
       p.speed[row] = moved / ctx.dt;
 
       if (m.grounded[mrow] !== 1) return;
@@ -274,22 +303,41 @@ export interface Sandbox {
   readonly layout: StreetLayout;
   readonly physics: PhysicsPort;
   readonly tuning: PlayerTuning;
+  readonly kind: SandboxKind;
+}
+
+export type SandboxKind = 'street' | 'range';
+
+export interface SandboxOptions {
+  readonly kind?: SandboxKind;
+  readonly tuning?: PlayerTuning;
 }
 
 /** `physics` must be a fresh, empty world for this sandbox (it is populated here). */
 export function createSandbox(
   seed: Seed,
   physics: PhysicsPort,
-  tuning: PlayerTuning = PLAYER_TUNING,
+  options: SandboxOptions = {},
 ): Sandbox {
-  const layout = generateStreetLayout(seed);
+  const kind = options.kind ?? 'street';
+  const tuning = options.tuning ?? PLAYER_TUNING;
+  const layout = kind === 'range' ? generateRangeLayout(seed) : generateStreetLayout(seed);
   buildStaticColliders(layout, physics);
   const world = new World();
   world.register(PlayerIntent);
   world.register(Pose);
   world.register(Motor);
   world.register(Flashlight);
+  world.register(SelectIntent);
+  world.register(Loadout);
+  world.register(Ammo);
+  world.register(WeaponItem);
+  world.register(Projectile);
+  world.register(Thrown);
+  world.register(Hazard);
+  world.register(Target);
   const player = world.spawn();
+  world.store(SelectIntent).fields.slot[world.store(SelectIntent).add(player)] = -1;
   const irow = world.store(PlayerIntent).add(player);
   world.store(PlayerIntent).fields.yaw[irow] = layout.spawn.yaw;
 
@@ -318,6 +366,32 @@ export function createSandbox(
   const frow = fl.add(player);
   fl.fields.on[frow] = 1;
   fl.fields.battery[frow] = 1;
+  giveLoadout(world, player, { infinite: kind === 'range', startSlot: kind === 'range' ? 2 : 0 });
+  spawnTargets(world, layout.targets);
+  const eyeOf = (
+    w: World,
+    out: { x: number; y: number; z: number; yaw: number; pitch: number; speed: number },
+  ): boolean => {
+    const pose = w.store(Pose);
+    const r = pose.rowOf(player);
+    if (r < 0) return false;
+    const f = pose.fields;
+    out.x = at(f.x, r);
+    out.y = at(f.y, r) + at(f.eye, r);
+    out.z = at(f.z, r);
+    out.yaw = at(f.yaw, r);
+    out.pitch = at(f.pitch, r);
+    out.speed = at(f.speed, r);
+    return true;
+  };
+  const spendStamina = (w: World, amount: number): boolean => {
+    const motor = w.store(Motor);
+    const r = motor.rowOf(player);
+    if (r < 0) return false;
+    const stamina = at(motor.fields.stamina, r);
+    motor.fields.stamina[r] = Math.max(0, stamina - amount);
+    return stamina >= amount;
+  };
 
   const simulation = new Simulation({
     seed,
@@ -329,6 +403,12 @@ export function createSandbox(
       physicsStepSystem(physics),
       poseSystem(player, physics, tuning),
       flashlightSystem(player),
+      weaponSelectSystem(player),
+      weaponFireSystem({ player, physics, eye: eyeOf, spendStamina }),
+      projectileSystem(physics),
+      thrownSystem(physics),
+      hazardSystem(),
+      targetSystem(kind === 'range'),
     ],
     hashExtras: [
       (h) => {
@@ -336,7 +416,7 @@ export function createSandbox(
       },
     ],
   });
-  return { simulation, player, layout, physics, tuning };
+  return { simulation, player, layout, physics, tuning, kind };
 }
 
 /** Everything the renderer needs for one frame, interpolated. Reused, never reallocated. */
@@ -358,6 +438,101 @@ export interface RenderView {
   simTime: number;
   tick: number;
   stimulus: BodycamStimulus;
+  weapon: WeaponView;
+}
+
+/** What the viewmodel/HUD-less presentation needs about the weapon in hand. */
+export interface WeaponView {
+  id: WeaponId | null;
+  phase: WeaponPhase;
+  stage: ReloadStage;
+  /** Seconds left in the current phase. */
+  timer: number;
+  /** Melee swing progress 0..1. */
+  swing: number;
+  mag: number;
+  chambered: boolean;
+  reserve: number;
+  infinite: boolean;
+  mode: number;
+  aiming: boolean;
+  wear: number;
+}
+
+export function createWeaponView(): WeaponView {
+  return {
+    id: null,
+    phase: 'ready',
+    stage: 'magOut',
+    timer: 0,
+    swing: 0,
+    mag: 0,
+    chambered: false,
+    reserve: 0,
+    infinite: false,
+    mode: 0,
+    aiming: false,
+    wear: 0,
+  };
+}
+
+const PHASE_ORDER: readonly WeaponPhase[] = [
+  'ready',
+  'cycling',
+  'reloading',
+  'jammed',
+  'clearing',
+  'drawing',
+  'swinging',
+];
+const STAGE_ORDER: readonly ReloadStage[] = ['magOut', 'magIn', 'chamber', 'shell'];
+
+function readWeaponView(sandbox: Sandbox, out: WeaponView): void {
+  const world = sandbox.simulation.world;
+  const row = activeItemRow(world, sandbox.player);
+  if (row < 0) {
+    out.id = null;
+    return;
+  }
+  const f = world.store(WeaponItem).fields;
+  const id = weaponAt(at(f.weapon, row)) ?? null;
+  out.id = id;
+  out.phase = PHASE_ORDER[at(f.phase, row)] ?? 'ready';
+  out.stage = STAGE_ORDER[at(f.stage, row)] ?? 'magOut';
+  out.timer = at(f.timer, row);
+  out.swing = at(f.swing, row);
+  out.mag = at(f.mag, row);
+  out.chambered = f.chambered[row] === 1;
+  out.mode = at(f.mode, row);
+  out.wear = at(f.wear, row);
+  const ammo = world.store(Ammo);
+  const arow = ammo.rowOf(sandbox.player);
+  out.infinite = arow >= 0 && ammo.fields.infinite[arow] === 1;
+  out.reserve = 0;
+  if (arow >= 0 && id !== null) {
+    const w = WEAPONS[id];
+    const a = ammo.fields;
+    if (w.kind === 'firearm') {
+      out.reserve = at(
+        w.ammo === '9x19'
+          ? a.r9x19
+          : w.ammo === '5.56x45'
+            ? a.r556
+            : w.ammo === '7.62x51'
+              ? a.r762
+              : a.r12ga,
+        arow,
+      );
+    } else if (w.kind === 'throwable') {
+      out.reserve = at(
+        id === 'frag' ? a.frag : id === 'emp' ? a.emp : id === 'flare' ? a.flare : a.molotov,
+        arow,
+      );
+    }
+  }
+  const intent = world.store(PlayerIntent);
+  const irow = intent.rowOf(sandbox.player);
+  out.aiming = irow >= 0 && (at(intent.fields.buttons, irow) & actionBit('aim')) !== 0;
 }
 
 export function createRenderView(): RenderView {
@@ -377,6 +552,7 @@ export function createRenderView(): RenderView {
     simTime: 0,
     tick: 0,
     stimulus: createStimulus(),
+    weapon: createWeaponView(),
   };
 }
 
@@ -407,6 +583,7 @@ export function readRenderView(sandbox: Sandbox, alpha: number, out: RenderView)
   const frow = fl.rowOf(player);
   out.flashlightOn = frow >= 0 && fl.fields.on[frow] === 1;
   out.battery = frow >= 0 ? at(fl.fields.battery, frow) : 0;
+  readWeaponView(sandbox, out.weapon);
   out.tick = simulation.tick;
   out.simTime = Math.max(0, (simulation.tick - 1 + a) / simulation.tickRate);
   return out;

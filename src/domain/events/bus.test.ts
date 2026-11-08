@@ -20,7 +20,21 @@ describe('event bus', () => {
     e.footstep.emit();
     e.land.emit();
     e.jump.emit();
+    e.shot.emit();
+    e.hit.emit();
+    e.impact.emit();
+    e.explosion.emit();
+    e.weaponFx.emit();
     e.clear();
-    expect(e.footstep.size + e.land.size + e.jump.size).toBe(0);
+    expect(
+      e.footstep.size +
+        e.land.size +
+        e.jump.size +
+        e.shot.size +
+        e.hit.size +
+        e.impact.size +
+        e.explosion.size +
+        e.weaponFx.size,
+    ).toBe(0);
   });
 });

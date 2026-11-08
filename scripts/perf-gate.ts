@@ -63,7 +63,7 @@ async function measure(
 const results = {
   emptyWorld: await measure('emptyWorld', createEmptyWorld(seed(1)).simulation, 2_000_000),
   churnWorld: await measure('churnWorld', createChurnWorld(seed(1)), 200_000),
-  sandbox: await measure('sandbox', await walkingSandbox(), 100_000),
+  sandbox: await measure('sandbox', await walkingSandbox(), 300_000),
 };
 observer.disconnect();
 

@@ -21,6 +21,10 @@ import type { QualitySettings } from './quality';
 import { Flashlight } from './scene/flashlight';
 import { animateStreet, buildStreetScene, type StreetScene } from './scene/street-scene';
 import { MaterialLibrary } from './textures/material-library';
+import { Viewmodel } from './weapons/viewmodel';
+import { CombatFx } from './weapons/combat-fx';
+import type { GameEvents } from '../../domain/events/bus';
+import { WEAPONS } from '../../domain/weapons/registry';
 import type { TextureBaker } from './textures/texture-baker';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -72,6 +76,10 @@ export class BodycamPresenter implements Presenter {
   private internalHeight = 1;
   private readonly resizeObserver: ResizeObserver;
   private colliderLines: THREE.LineSegments | null = null;
+  readonly viewmodel = new Viewmodel();
+  readonly combatFx: CombatFx;
+  private readonly baseFov = 78;
+  private zoom = 1;
 
   private constructor(
     private readonly options: BodycamPresenterOptions,
@@ -85,6 +93,8 @@ export class BodycamPresenter implements Presenter {
     this.rig = new BodycamRig(this.camera);
     this.flashlight = new Flashlight(q.shadowMapSize);
     street.scene.add(this.flashlight.light, this.flashlight.light.target);
+    this.combatFx = new CombatFx(options.sandbox);
+    street.scene.add(this.combatFx.group);
     const depth = new THREE.DepthTexture(1, 1);
     depth.type = THREE.UnsignedIntType;
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -160,7 +170,10 @@ export class BodycamPresenter implements Presenter {
   private async warmUp(): Promise<void> {
     readRenderView(this.options.sandbox, 1, this.view);
     this.rig.update(this.view, null, 0, 0);
+    this.combatFx.setWarmup(true);
     await this.renderer.compileAsync(this.street.scene, this.camera);
+    await this.renderer.compileAsync(this.viewmodel.scene, this.camera);
+    this.combatFx.setWarmup(false);
     const saved = clonePostFx(this.postFx);
     for (const s of Object.values(this.postFx)) s.enabled = true;
     this.present(1);
@@ -203,6 +216,31 @@ export class BodycamPresenter implements Presenter {
       rgb[j + 2] = (colors[i + 2] ?? 0) * 4;
     }
     g.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+  }
+
+  /** Call after every simulation tick: per-tick events are cleared on the next one. */
+  consumeEvents(events: GameEvents): void {
+    for (let i = 0; i < events.weaponFx.size; i++) {
+      const e = events.weaponFx.at(i);
+      if (e) this.viewmodel.onWeaponEvent(e.flags, e.weapon);
+    }
+    const feetY = this.view.y - 1.7;
+    for (let i = 0; i < events.shot.size; i++) {
+      const e = events.shot.at(i);
+      if (e) this.combatFx.shot(e, this.viewmodel.ejectionWorld, this.viewmodel.rightWorld, feetY);
+    }
+    for (let i = 0; i < events.impact.size; i++) {
+      const e = events.impact.at(i);
+      if (e) this.combatFx.impact(e);
+    }
+    for (let i = 0; i < events.hit.size; i++) {
+      const e = events.hit.at(i);
+      if (e) this.combatFx.hit(e);
+    }
+    for (let i = 0; i < events.explosion.size; i++) {
+      const e = events.explosion.at(i);
+      if (e) this.combatFx.explosion(e);
+    }
   }
 
   setFactories(factories: EffectFactories): void {
@@ -273,9 +311,26 @@ export class BodycamPresenter implements Presenter {
     animateStreet(this.street, time);
     this.updateColliderOverlay();
 
+    // Aiming zooms the lens (the rifle's optic most of all).
+    const w = view.weapon.id === null ? null : WEAPONS[view.weapon.id];
+    const zoomTarget = view.weapon.aiming && w?.kind === 'firearm' ? w.adsZoom : 1;
+    this.zoom += (zoomTarget - this.zoom) * (frozen !== undefined ? 1 : 1 - Math.exp(-dt * 10));
+    const fov = this.baseFov / this.zoom;
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.viewmodel.update(this.camera, view, frozen !== undefined ? 1 / 60 : dt, view.flashlightOn);
+    this.combatFx.update(frozen !== undefined ? 0 : dt);
+
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.setViewport(0, 0, this.internalWidth, this.internalHeight);
     this.renderer.render(this.street.scene, this.camera);
+    // First-person weapon in its own pass: depth cleared so it never clips into walls.
+    this.renderer.autoClear = false;
+    this.renderer.clearDepth();
+    this.renderer.render(this.viewmodel.scene, this.camera);
+    this.renderer.autoClear = true;
 
     this.viewProj.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
     const f = this.frame;
@@ -318,6 +373,8 @@ export class BodycamPresenter implements Presenter {
   dispose(): void {
     this.resizeObserver.disconnect();
     this.pipeline.dispose();
+    this.viewmodel.dispose();
+    this.combatFx.dispose();
     this.flashlight.dispose();
     this.sceneTarget.dispose();
     this.street.dispose();

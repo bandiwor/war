@@ -7,7 +7,7 @@ import { entityIndex, rawEntityIndex, type EntityId } from './entity';
  * Field arrays are replaced when the store grows, so never cache
  * `store.fields.x` across a call that may add entities.
  */
-export type FieldType = 'f32' | 'f64' | 'i32' | 'u32' | 'u8';
+export type FieldType = 'f32' | 'f64' | 'i32' | 'u32' | 'u16' | 'u8';
 export type Schema = Readonly<Record<string, FieldType>>;
 
 export type FieldArray<T extends FieldType> = T extends 'f32'
@@ -18,7 +18,9 @@ export type FieldArray<T extends FieldType> = T extends 'f32'
       ? Int32Array
       : T extends 'u32'
         ? Uint32Array
-        : Uint8Array;
+        : T extends 'u16'
+          ? Uint16Array
+          : Uint8Array;
 
 export type Fields<S extends Schema> = { [K in keyof S]: FieldArray<S[K]> };
 
@@ -32,7 +34,8 @@ export function defineComponent<const S extends Schema>(name: string, schema: S)
   return Object.freeze({ name, schema });
 }
 
-type AnyFieldArray = Float32Array | Float64Array | Int32Array | Uint32Array | Uint8Array;
+type AnyFieldArray =
+  Float32Array | Float64Array | Int32Array | Uint32Array | Uint16Array | Uint8Array;
 
 function allocate(type: FieldType, capacity: number): AnyFieldArray {
   switch (type) {
@@ -44,6 +47,8 @@ function allocate(type: FieldType, capacity: number): AnyFieldArray {
       return new Int32Array(capacity);
     case 'u32':
       return new Uint32Array(capacity);
+    case 'u16':
+      return new Uint16Array(capacity);
     case 'u8':
       return new Uint8Array(capacity);
   }

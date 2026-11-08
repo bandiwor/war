@@ -29,6 +29,11 @@ export class World {
     return store as unknown as ComponentStore<S>;
   }
 
+  /** Store for `def`, or null when this world does not use that component. */
+  tryStore<S extends Schema>(def: ComponentDef<S>): ComponentStore<S> | null {
+    return this.byDef.has(def) ? this.store(def) : null;
+  }
+
   componentNames(): readonly string[] {
     return this.stores.map((s) => s.def.name);
   }

@@ -36,6 +36,8 @@ export const FootstepAcousticsSchema = z.object({
   splash: Level,
   /** Loudness for AI hearing, relative to concrete = 1. */
   loudness: z.number().positive(),
+  /** Mid-band acoustic absorption coefficient (Sabine alpha) for reverb estimation. */
+  absorption: z.number().min(0).max(1),
 });
 export type FootstepAcoustics = z.infer<typeof FootstepAcousticsSchema>;
 
@@ -47,6 +49,7 @@ export const SURFACES = {
     grit: { density: 0.35, level: 0.35 },
     splash: 0.15,
     loudness: 1,
+    absorption: 0.05,
   },
   concrete: {
     thump: { freq: 95, decay: 0.045, level: 0.65 },
@@ -55,6 +58,7 @@ export const SURFACES = {
     grit: { density: 0.15, level: 0.2 },
     splash: 0,
     loudness: 1,
+    absorption: 0.02,
   },
   metal: {
     thump: { freq: 120, decay: 0.06, level: 0.5 },
@@ -63,6 +67,7 @@ export const SURFACES = {
     grit: { density: 0.05, level: 0.1 },
     splash: 0,
     loudness: 1.6,
+    absorption: 0.04,
   },
   wood: {
     thump: { freq: 150, decay: 0.08, level: 0.85 },
@@ -71,6 +76,7 @@ export const SURFACES = {
     grit: { density: 0.05, level: 0.1 },
     splash: 0,
     loudness: 1.2,
+    absorption: 0.12,
   },
   dirt: {
     thump: { freq: 70, decay: 0.06, level: 0.6 },
@@ -79,6 +85,7 @@ export const SURFACES = {
     grit: { density: 0.7, level: 0.55 },
     splash: 0,
     loudness: 0.6,
+    absorption: 0.35,
   },
   water: {
     thump: { freq: 80, decay: 0.05, level: 0.4 },
@@ -87,6 +94,7 @@ export const SURFACES = {
     grit: { density: 0.1, level: 0.1 },
     splash: 0.9,
     loudness: 1.3,
+    absorption: 0.01,
   },
 } as const satisfies Record<SurfaceId, FootstepAcoustics>;
 

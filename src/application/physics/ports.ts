@@ -23,6 +23,11 @@ export interface Point {
   z: number;
 }
 
+export interface RayHit {
+  distance: number;
+  surface: SurfaceId | null;
+}
+
 export interface CharacterSpec {
   readonly feet: Vec3;
   readonly radius: number;
@@ -43,6 +48,11 @@ export interface PhysicsPort {
   characterFeet(id: CharacterId, out: Point): Point;
   /** Surface directly under the character's feet, or null when nothing is there. */
   surfaceBelow(id: CharacterId): SurfaceId | null;
+  /**
+   * Acoustic/visibility ray: nearest hit with a real surface (invisible
+   * blockers are ignored). Returns false when nothing is hit within `maxDistance`.
+   */
+  raycast(origin: Point, dir: Point, maxDistance: number, out: RayHit): boolean;
   step(dt: number): void;
   hashInto(h: StateHasher): void;
   /** Debug wireframe of all colliders (line segment pairs). */

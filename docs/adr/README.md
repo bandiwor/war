@@ -11,3 +11,4 @@ New ADRs get the next number; superseded ones stay, marked as superseded.
 | 0004 | [Testing and quality gates](0004-testing.md)                                     | Accepted |
 | 0005 | [Rendering and bodycam post-processing](0005-rendering-and-bodycam.md)           | Accepted |
 | 0006 | [Physics, player controller, events, replays v2](0006-physics-player-replays.md) | Accepted |
+| 0007 | [Procedural audio engine and dynamic soundscape](0007-procedural-audio.md)       | Accepted |

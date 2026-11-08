@@ -1,6 +1,7 @@
 import type { ReplayRecorder } from '../application/replay/replay';
 import { formatReplay, parseReplay, type Replay } from '../application/replay/replay';
 import type { Sandbox } from '../application/scenes/sandbox';
+import type { SoundscapeDirector } from '../application/audio/soundscape-director';
 import type { AudioEngine } from '../infrastructure/audio/audio-engine';
 import type { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 
@@ -18,6 +19,7 @@ export interface GameSession {
   readonly playing: Replay | null;
   readonly audio: AudioEngine | null;
   readonly footsteps: FootstepPlayer | null;
+  readonly director: SoundscapeDirector | null;
   footstepCount: number;
 }
 

@@ -1,6 +1,7 @@
 import { BenchmarkInput } from '../application/benchmark-input';
 import { GameLoop } from '../application/loop/game-loop';
-import type { InputSource } from '../application/loop/ports';
+import type { InputSource, Presenter } from '../application/loop/ports';
+import { SoundscapeDirector } from '../application/audio/soundscape-director';
 import { ReplayRecorder } from '../application/replay/replay';
 import { RecordingInput, ReplayInput } from '../application/replay/replay-input';
 import { TICK_RATE } from '../application/scenes/empty-world';
@@ -77,7 +78,9 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  const audio = createAudio();
+  const audio = createAudio(runSeed);
+  const director =
+    audio === null ? null : new SoundscapeDirector(sandbox.layout, sandbox.physics, audio, runSeed);
   const footsteps = audio === null ? null : new FootstepPlayer(audio, runSeed);
   if (audio !== null) {
     const unlock = (): void => {
@@ -108,20 +111,13 @@ async function bootstrap(): Promise<void> {
     input = recording;
   }
 
-  const session = newSession(sandbox, recorder, playing, audio, footsteps);
-  const listener = { x: 0, y: 0, z: 0, yaw: 0 };
+  const session = newSession(sandbox, recorder, playing, audio, footsteps, director);
   const onTick = (s: Simulation): void => {
     markTick();
     recorder?.afterStep(s);
     const events = s.events;
     session.footstepCount += events.footstep.size;
-    if (footsteps !== null && audio !== null) {
-      const v = presenter.view;
-      listener.x = v.x;
-      listener.y = v.y;
-      listener.z = v.z;
-      listener.yaw = v.yaw;
-      audio.setListener(listener);
+    if (footsteps !== null) {
       for (let i = 0; i < events.footstep.size; i++) {
         const e = events.footstep.at(i);
         if (e) footsteps.footstep(e);
@@ -132,11 +128,21 @@ async function bootstrap(): Promise<void> {
       }
     }
   };
+  // The soundscape follows the rendered (interpolated) view on the wall clock.
+  let lastFrame = performance.now();
+  const presentWithAudio: Presenter = {
+    present(alpha) {
+      presenter.present(alpha);
+      const now = performance.now();
+      director?.update(presenter.view, Math.min(0.25, (now - lastFrame) / 1000));
+      lastFrame = now;
+    },
+  };
   const loop = new GameLoop({
     simulation: sim,
     frames: new RafFrameSource(),
     input,
-    presenter,
+    presenter: presentWithAudio,
     onTick,
   });
   loop.start();
@@ -158,13 +164,14 @@ function newSession(
   playing: GameSession['playing'],
   audio: AudioEngine | null = null,
   footsteps: FootstepPlayer | null = null,
+  director: SoundscapeDirector | null = null,
 ): GameSession {
-  return { sandbox, recorder, playing, audio, footsteps, footstepCount: 0 };
+  return { sandbox, recorder, playing, audio, footsteps, director, footstepCount: 0 };
 }
 
-function createAudio(): AudioEngine | null {
+function createAudio(runSeed: number): AudioEngine | null {
   try {
-    return new AudioEngine();
+    return AudioEngine.create(runSeed);
   } catch (error) {
     console.warn('Audio unavailable', error);
     return null;

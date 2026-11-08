@@ -1,6 +1,7 @@
 import type { Seed } from '../core/brand';
 import { Rng } from '../math/prng';
 import type { MaterialId } from '../procgen/materials';
+import type { ZoneId } from '../audio/zones';
 
 /**
  * Authored-structure + procedural-detail layout of the stage-1 test street:
@@ -48,7 +49,15 @@ export interface BlockerPiece {
   readonly size: Vec3;
 }
 
+/** Axis-aligned XZ region belonging to a world zone (soundscape, later spawns and weather). */
+export interface ZoneVolume {
+  readonly zone: ZoneId;
+  readonly min: readonly [number, number];
+  readonly max: readonly [number, number];
+}
+
 export interface StreetLayout {
+  readonly zones: readonly ZoneVolume[];
   readonly boxes: readonly BoxPiece[];
   readonly blockers: readonly BlockerPiece[];
   readonly props: readonly PropPiece[];
@@ -254,7 +263,14 @@ export function generateStreetLayout(seed: Seed): StreetLayout {
     { center: [0, 5, halfL + 0.5], size: [2 * (sideX + alleyDepth), 10, 1] },
   ];
 
+  // South of the barricade is the old residential city; north of it, the industrial yards.
+  const zones: ZoneVolume[] = [
+    { zone: 'abandonedCity', min: [-60, -halfL - 10], max: [60, beaconZ] },
+    { zone: 'industrial', min: [-60, beaconZ], max: [60, halfL + 10] },
+  ];
+
   return {
+    zones,
     boxes,
     blockers,
     props,
@@ -262,4 +278,34 @@ export function generateStreetLayout(seed: Seed): StreetLayout {
     spawn: { position: [1.5, 0, -halfL + 4], yaw: Math.PI },
     walkBounds: [-sideX + 0.3, -halfL + 0.5, sideX - 0.3, halfL - 0.5],
   };
+}
+
+/** Distance from (x, z) to an XZ box (0 inside). */
+function distanceToVolume(v: ZoneVolume, x: number, z: number): number {
+  const dx = Math.max(v.min[0] - x, 0, x - v.max[0]);
+  const dz = Math.max(v.min[1] - z, 0, z - v.max[1]);
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+/**
+ * Zone weights at a point, cross-fading over `blend` metres around each
+ * boundary, so walking across a border morphs the soundscape smoothly.
+ */
+export function zoneWeightsAt(
+  layout: StreetLayout,
+  x: number,
+  z: number,
+  blend = 8,
+): Partial<Record<ZoneId, number>> {
+  const out: Partial<Record<ZoneId, number>> = {};
+  for (const v of layout.zones) {
+    // Signed distance: negative inside, measured to the nearest edge.
+    const inside = x >= v.min[0] && x <= v.max[0] && z >= v.min[1] && z <= v.max[1];
+    const edge = inside
+      ? -Math.min(x - v.min[0], v.max[0] - x, z - v.min[1], v.max[1] - z)
+      : distanceToVolume(v, x, z);
+    const w = Math.min(1, Math.max(0, 0.5 - edge / blend));
+    if (w > 0) out[v.zone] = (out[v.zone] ?? 0) + w;
+  }
+  return out;
 }

@@ -20,7 +20,7 @@ export default defineConfig({
         'src/infrastructure/render/postfx/{pipeline,simple-pass,tonemap,types}.ts',
         'src/infrastructure/render/osd/osd-canvas.ts',
         // Web Audio-bound playback: exercised by e2e/player.spec.ts (pure DSP is unit-tested).
-        'src/infrastructure/audio/{audio-engine,footstep-player}.ts',
+        'src/infrastructure/audio/{audio-engine,footstep-player,ambience.worklet}.ts',
       ],
       // Branch thresholds are lower than line thresholds because every typed-array
       // read needs a `?? 0` fallback under noUncheckedIndexedAccess, and v8 counts

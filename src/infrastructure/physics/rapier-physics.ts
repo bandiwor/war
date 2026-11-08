@@ -5,6 +5,7 @@ import type {
   CharacterSpec,
   PhysicsPort,
   Point,
+  RayHit,
 } from '../../application/physics/ports';
 import type { StateHasher } from '../../domain/math/hash';
 import type { Vec3 } from '../../domain/world/street-layout';
@@ -43,6 +44,7 @@ export class RapierPhysics implements PhysicsPort {
   private readonly characters: Character[] = [];
   private dirty = true;
   private readonly ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+  private readonly probe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
   private readonly desired = { x: 0, y: 0, z: 0 };
   private readonly scratch = { x: 0, y: 0, z: 0 };
   private readonly computed = new RAPIER.Vector3(0, 0, 0);
@@ -175,6 +177,27 @@ export class RapierPhysics implements PhysicsPort {
    * every world.step() (measured by the perf gate), so we only step when
    * colliders were added; dynamic bodies (later stages) will step every tick.
    */
+  raycast(origin: Point, dir: Point, maxDistance: number, out: RayHit): boolean {
+    this.flush();
+    this.probe.origin = { x: origin.x, y: origin.y, z: origin.z };
+    this.probe.dir = { x: dir.x, y: dir.y, z: dir.z };
+    // Characters and surface-less blockers are acoustically transparent.
+    const hit = this.world.castRay(
+      this.probe,
+      maxDistance,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (c) => this.surfaces.has(c.handle),
+    );
+    if (hit === null) return false;
+    out.distance = hit.timeOfImpact;
+    out.surface = this.surfaces.get(hit.collider.handle) ?? null;
+    return true;
+  }
+
   step(): void {
     if (this.dirty) {
       this.world.step();

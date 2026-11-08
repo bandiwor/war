@@ -8,7 +8,10 @@ animals) and a story told through found logs, radio chatter and camera recording
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 2, physics and player.** A Rapier-driven first-person body (walk, sprint with
+> Status: **stage 3, audio.** A procedural soundscape in an AudioWorklet (wind, hum, insects, drips,
+> creaks, rumble…) that changes with zone, night, danger and health, reverb computed from the
+> surrounding geometry, occlusion, and distant events (feral dogs, sirens, robot radio).
+> Previously: **stage 2, physics and player.** A Rapier-driven first-person body (walk, sprint with
 > stamina, crouch, jump, curb step-ups) with synthesized footsteps per surface, and replays
 > verified by a golden physics replay. Previously: **stage 1, rendering and bodycam.** A procedural night street (PBR materials baked from
 > seeds in Web Workers), a flashlight, and a 15-module bodycam post stack driven by gameplay stimulus,
@@ -69,14 +72,15 @@ Layers: `domain → application → infrastructure → presentation`, plus a `he
 
 Guides: [add a system](docs/guides/adding-a-system.md) ·
 [add a bodycam effect](docs/guides/adding-an-effect.md) ·
-[add a material](docs/guides/adding-a-material.md).
+[add a material](docs/guides/adding-a-material.md) ·
+[add a zone soundscape](docs/guides/adding-a-zone-soundscape.md).
 
 ## Roadmap
 
 0. ✅ Skeleton: strict TS, lint, tests, CI, deterministic PRNG and fixed-step loop
 1. ✅ Rendering and bodycam post-processing
 2. ✅ Physics and player controller, input replays
-3. Procedural audio engine
+3. ✅ Procedural audio engine
 4. Weapons
 5. World streaming, time of day, weather
 6. AI core, bestiary, HMR

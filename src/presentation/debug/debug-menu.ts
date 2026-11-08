@@ -12,6 +12,8 @@ import { FRAME_BUDGETS } from '../../infrastructure/render/budgets';
 import { QUALITY_PRESETS } from '../../infrastructure/render/quality';
 import { downloadReplay, playReplayFile, type GameSession } from '../session';
 import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
+import { DISTANT_KINDS, ZONE_IDS, ZONE_SOUNDSCAPES, isZoneId } from '../../domain/audio/zones';
+import { LAYER_IDS, type LayerId } from '../../infrastructure/audio/dsp/ambience-renderer';
 import { el, slider, sparkline } from './widgets';
 
 /** Marker string checked by scripts/check-bundle.mjs to prove tree-shaking. */
@@ -45,7 +47,27 @@ export interface WarDebugApi {
   };
   setColliders(enabled: boolean): void;
   pauseAtTick(tick: number): void;
+  setZone(zone: string | null): boolean;
+  setAudioOverride(key: OverrideKey, value: number | null): void;
+  audioStats(): {
+    zones: Partial<Record<string, number>>;
+    levels: Partial<Record<string, number>>;
+    rt60: number | null;
+    enclosure: number | null;
+    distantPlayed: number;
+    workletReady: boolean;
+    heartbeat: number;
+  } | null;
 }
+
+type OverrideKey = 'danger' | 'enemyProximity' | 'health' | 'rain' | 'night';
+const OVERRIDE_KEYS: readonly OverrideKey[] = [
+  'danger',
+  'enemyProximity',
+  'health',
+  'rain',
+  'night',
+];
 
 declare global {
   interface Window {
@@ -243,6 +265,82 @@ export function installDebugMenu({
     setAll(false);
   });
 
+  // --- Audio ----------------------------------------------------------------
+  const audioTab = addSection('Audio');
+  const audioInfo = el('pre');
+  audioTab.append(audioInfo);
+  const director = session.director;
+  const engine = session.audio;
+  const meters = new Map<LayerId, HTMLElement>();
+  if (director !== null && engine !== null) {
+    const zone = el('select');
+    zone.dataset['control'] = 'zone';
+    zone.append(new Option('auto (from position)', ''));
+    for (const id of ZONE_IDS) zone.append(new Option(ZONE_SOUNDSCAPES[id].label, id));
+    zone.addEventListener('change', () => {
+      director.overrides.zone = isZoneId(zone.value) ? zone.value : null;
+    });
+    audioTab.append(el('label', '', 'zone '), zone);
+    const box = el('fieldset');
+    box.append(el('legend', '', 'situation overrides (move a slider to override)'));
+    const defaults: Record<OverrideKey, number> = {
+      danger: 0,
+      enemyProximity: 0,
+      health: 1,
+      rain: 0,
+      night: 0.7,
+    };
+    for (const key of OVERRIDE_KEYS) {
+      box.append(
+        slider(key, 0, 1, 0.01, defaults[key], (v) => {
+          director.overrides[key] = v;
+        }).row,
+      );
+    }
+    const reset = el('button', '', 'Clear overrides');
+    reset.type = 'button';
+    reset.addEventListener('click', () => {
+      for (const key of OVERRIDE_KEYS) director.overrides[key] = null;
+      director.overrides.zone = null;
+      zone.value = '';
+    });
+    box.append(reset);
+    audioTab.append(box);
+    const layers = el('fieldset');
+    layers.append(el('legend', '', 'ambient layers (level · mute)'));
+    for (const id of LAYER_IDS) {
+      const row = el('label', 'debug-slider');
+      const bar = el('span', 'debug-meter');
+      const mute = el('input');
+      mute.type = 'checkbox';
+      mute.addEventListener('change', () => {
+        engine.setLayerMuted(id, mute.checked);
+      });
+      row.append(el('span', 'debug-label', id), bar, mute);
+      meters.set(id, bar);
+      layers.append(row);
+    }
+    audioTab.append(layers);
+    const events = el('fieldset');
+    events.append(el('legend', '', 'distant events (60 m ahead)'));
+    for (const kind of DISTANT_KINDS) {
+      const b = el('button', '', kind);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        engine.unlock();
+        const v = presenter.view;
+        engine.playDistant(kind, v.x - Math.sin(v.yaw) * 60, v.y + 3, v.z - Math.cos(v.yaw) * 60, {
+          gain: 1,
+          cutoffHz: 18000,
+        });
+      });
+      events.append(b);
+    }
+    audioTab.append(events);
+  } else {
+    audioInfo.textContent = 'audio unavailable in this mode';
+  }
+
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Backquote') {
       panel.hidden = !panel.hidden;
@@ -289,6 +387,31 @@ export function installDebugMenu({
       presenter.signal.trigger(performance.now() / 1000);
     },
     stats,
+    setZone(zone) {
+      if (director === null) return false;
+      if (zone === null) {
+        director.overrides.zone = null;
+        return true;
+      }
+      if (!isZoneId(zone)) return false;
+      director.overrides.zone = zone;
+      return true;
+    },
+    setAudioOverride(key, value) {
+      if (director !== null) director.overrides[key] = value;
+    },
+    audioStats() {
+      if (director === null || engine === null) return null;
+      return {
+        zones: { ...director.context.zones },
+        levels: { ...engine.levels },
+        rt60: director.acoustics?.rt60 ?? null,
+        enclosure: director.acoustics?.enclosure ?? null,
+        distantPlayed: engine.distantPlayed,
+        workletReady: engine.workletReady,
+        heartbeat: director.mix.heartbeat.gain,
+      };
+    },
     pauseAtTick(tick) {
       loop?.pauseAtTick(tick);
     },
@@ -329,6 +452,24 @@ export function installDebugMenu({
         `bake     ${[...presenter.bakeTimes].map(([k, v]) => `${k} ${v.toFixed(0)}ms`).join(', ')}`,
       ].join('\n');
       graph.draw(p.frameMs, FRAME_BUDGETS.frame);
+      if (director !== null && engine !== null) {
+        const a = director.acoustics;
+        const zones = Object.entries(director.context.zones)
+          .map(([z, w]) => `${z} ${w.toFixed(2)}`)
+          .join(', ');
+        audioInfo.textContent = [
+          `engine   ${engine.running ? 'running' : 'locked (click the view)'}  worklet ${engine.workletReady ? 'ready' : 'loading'}`,
+          `zone     ${zones || '-'}`,
+          `night    ${director.context.night.toFixed(2)}  indoor ${director.context.indoor.toFixed(2)}`,
+          `room     ${a === null ? '-' : `RT60 ${a.rt60.toFixed(2)} s  enclosure ${a.enclosure.toFixed(2)}  ${a.covered ? 'covered' : 'open sky'}  wet ${a.wet.toFixed(2)}`}`,
+          `distant  ${String(engine.distantPlayed)} played, last ${director.lastDistant ?? '-'}`,
+          `muffle   ${director.mix.muffleHz.toFixed(0)} Hz  heartbeat ${director.mix.heartbeat.gain.toFixed(2)} @ ${director.mix.heartbeat.bpm.toFixed(0)} bpm`,
+        ].join('\n');
+        for (const [id, bar] of meters) {
+          const level = engine.levels[id] ?? 0;
+          bar.style.width = `${String(Math.min(100, Math.round(Math.sqrt(level) * 220)))}%`;
+        }
+      }
     }
     requestAnimationFrame(refresh);
   };

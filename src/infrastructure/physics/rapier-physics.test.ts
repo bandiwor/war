@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { RayHit } from '../../application/physics/ports';
 import { StateHasher } from '../../domain/math/hash';
 import { RapierPhysics, createRapierPhysics, initRapier } from './rapier-physics';
 
@@ -85,6 +86,21 @@ describe('RapierPhysics', () => {
     const bogus = q.createCharacter(spec);
     expect(() => p.characterFeet(bogus, feet)).toThrow('Unknown character');
     q.dispose();
+  });
+
+  it('raycasts hit real surfaces and ignore blockers and characters', () => {
+    const p = flatWorld();
+    p.addStaticBox([5, 1, 0], [1, 2, 4], 0, 'wood'); // face at x = 4.5
+    p.addStaticBox([-3, 1, 0], [1, 2, 4], 0, null); // invisible blocker
+    p.createCharacter({ ...spec, feet: [2, 0, 0] }); // standing in the way
+    const hit: RayHit = { distance: 0, surface: null };
+    expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, 20, hit)).toBe(true);
+    expect(hit.distance).toBeCloseTo(4.5, 3);
+    expect(hit.surface).toBe('wood');
+    expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: -1, y: 0, z: 0 }, 20, hit)).toBe(false);
+    expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }, 20, hit)).toBe(true);
+    expect(hit.surface).toBe('asphalt');
+    expect(p.raycast({ x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 0 }, 20, hit)).toBe(false);
   });
 
   it('is deterministic: same calls, same snapshot hash; debug lines exist', async () => {

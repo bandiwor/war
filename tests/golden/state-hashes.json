@@ -1,0 +1,7 @@
+{
+  "empty/seed=1337/ticks=3600/input=false": "6532ca4aa08ab2c9",
+  "empty/seed=1337/ticks=3600/input=true": "15ae3ee385e3b84a",
+  "empty/seed=7/ticks=36000/input=true": "d8c3ff8d29047951",
+  "churn/seed=1337/ticks=3600/input=false": "5622676d8a47ea57",
+  "churn/seed=2024/ticks=10000/input=true": "a37561c4ae9ef522"
+}

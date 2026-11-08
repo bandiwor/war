@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Installed via `npm install` (prepare script sets core.hooksPath=.githooks).
+set -e
+npm run --silent typecheck
+npm run --silent lint
+npm run --silent format:check
+npm run --silent test

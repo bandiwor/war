@@ -1,0 +1,61 @@
+# Architecture
+
+```mermaid
+flowchart TB
+  subgraph presentation["presentation (browser composition root, UI, debug menu)"]
+    main[main.ts] --> osd[OsdPresenter]
+    main --> debug[debug/ — DEV only, tree-shaken]
+  end
+  subgraph headless["headless (Node composition root)"]
+    cli[cli.ts / run.ts]
+  end
+  subgraph infrastructure["infrastructure (adapters)"]
+    raf[RafFrameSource]
+    kbd[KeyboardMouseInput]
+  end
+  subgraph application["application (use cases, ports)"]
+    loop[GameLoop + FixedStepAccumulator]
+    sim[Simulation]
+    replay[Replay record / playback]
+    scenes[scenes/]
+    ports{{ports: FrameSource · InputSource · Presenter}}
+  end
+  subgraph domain["domain (pure, deterministic)"]
+    ecs[ECS: entities · SoA stores · schedule]
+    math[sfc32 Rng streams · StateHasher · dmath]
+    input[InputCommand schema]
+  end
+  presentation --> infrastructure --> application --> domain
+  headless --> application
+  raf -. implements .-> ports
+  kbd -. implements .-> ports
+  osd -. implements .-> ports
+```
+
+## Frame flow
+
+1. `RafFrameSource` delivers a wall-clock timestamp (the only clock in the game).
+2. `GameLoop` feeds the delta to `FixedStepAccumulator` → N fixed 60 Hz steps.
+3. For each step: `InputSource.commandsFor(tick)` → `Simulation.step(commands)` → systems run in
+   schedule order on a reused `SimContext` (world, RNG streams, tick, dt, commands).
+4. `Presenter.present(alpha)` draws, interpolating between the last two ticks.
+
+Replays record exactly the per-tick commands from step 3, so playback in Node reproduces the run.
+
+## Folder map
+
+| Path                         | Contents                                                      |
+| ---------------------------- | ------------------------------------------------------------- |
+| `src/domain/core`            | Branded types (`Seed`, `Tick`), `assertNever`, `invariant`    |
+| `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`      |
+| `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule` |
+| `src/domain/input`           | `InputCommand` discriminated union + Zod schema               |
+| `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`                   |
+| `src/infrastructure/browser` | rAF frame source, keyboard/mouse input                        |
+| `src/presentation`           | Browser composition root, OSD, `debug/`                       |
+| `src/headless`               | Node runner and CLI                                           |
+| `tests/golden`               | Golden hashes and replay files                                |
+| `tests/fixtures`             | Test-only worlds (e.g. the churn stress world)                |
+| `eslint/architecture.js`     | Layer and determinism lint rules                              |
+| `scripts/`                   | Perf gate, bundle check                                       |
+| `docs/adr`                   | Architecture decision records                                 |

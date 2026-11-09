@@ -200,6 +200,9 @@ export class Viewmodel {
     const mag = cur.model.parts.get('magazine') ?? [];
     const slide = [...(cur.model.parts.get('slide') ?? []), ...(cur.model.parts.get('bolt') ?? [])];
     const pump = cur.model.parts.get('pump') ?? [];
+    // The rocket sits in the muzzle only while one is loaded (or being seated).
+    const loaded = wv.chambered || (wv.phase === 'reloading' && wv.stage === 'chamber');
+    for (const part of cur.model.parts.get('warhead') ?? []) part.visible = loaded;
     if (w.kind === 'firearm') {
       if (wv.phase === 'reloading' && !w.tubeFed) {
         const total =

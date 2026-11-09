@@ -7,6 +7,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env['CI']),
   retries: 0,
+  // Each page runs a software rasterizer plus an audio thread: more than 3 at once starves them.
+  workers: 3,
   reporter: process.env['CI'] ? 'github' : 'list',
   use: { baseURL: `http://localhost:${String(PORT)}`, trace: 'off' },
   // Software (SwiftShader) and GPU rasterizers differ slightly; 1% of pixels may drift.

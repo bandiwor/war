@@ -103,3 +103,32 @@ commands through a `CommandQueue`, so tool-driven sessions stay replayable.
   and spread are data hooks for the loadout UI later.
 - Rapier's JS wrapper allocates per character move (about 85 minor GCs per million ticks). The
   perf budget documents this; our own systems allocate nothing per tick.
+
+## Amendment: gunshot audio fix and the RPG-7
+
+**Gunshot audio.** Two defects were found by inspection and measurement:
+
+- **Playback:** the player's own shots and reload clicks went through the HRTF panner at a point
+  centimetres below the listener, which renders as "below the chin". They now use
+  `AudioEngine.playLocal`: head-locked, slightly panned, still feeding the geometry reverb. Other
+  shooters will use the 3D path.
+- **Synthesis:** all firearms shared one envelope (a noise puff 5 dB down after 5 ms, RMS about 0.12
+  over 300 ms). Shots are now layered by physical cause: snap, bark around the weapon's body
+  frequency, falling thump, a darkening tail whose length scales with cartridge energy, and two slap
+  echoes. The sum goes through a soft clipper for density (RMS 0.20–0.34). Unit tests lock in the
+  density, the immediate attack, and the caliber-ordered tails.
+
+**RPG-7.** Added purely through the registry plus one projectile type:
+
+- **Data:** `projectile: { kind: 'rocket', thrust, ignite, burnout, armMeters, fuseSeconds,
+explosion }` on firearms (default `bullet`), a caseless `pg7v` ammo entry, a `single` action (one
+  round in the tube, nothing to cycle) and a `warhead` model role.
+- **Flight:** `integrateRocket` applies thrust along the velocity during the burn window, then drag
+  and gravity. Launch is 115 m/s and the peak about 295 m/s. Zeroing flies the same function at the
+  simulation tick, so sights match flight.
+- **Terminal effects:** a direct hit does 600 damage. An armed rocket explodes (5 m radius, 220
+  damage, the same cover rules as grenades). Inside 5 m it is a dud, and it self-destructs at 4.5 s.
+- **Loadout:** an 11th slot (the `-` key). Weapon ids are appended, so indices recorded in older
+  replays stay valid.
+
+Backblast is visual and audible only; it does not yet damage what stands behind the shooter.

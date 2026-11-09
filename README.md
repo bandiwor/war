@@ -31,19 +31,19 @@ npm run dev
 
 Open the printed URL and click to capture the mouse.
 
-| Input        | Action                                                   |
-| ------------ | -------------------------------------------------------- |
-| Mouse        | Look                                                     |
-| W A S D      | Walk                                                     |
-| Shift        | Sprint (drains stamina)                                  |
-| Space        | Jump                                                     |
-| Left mouse   | Fire / swing / throw                                     |
-| Right mouse  | Aim down sights (rifle: 6× optic)                        |
-| R            | Reload (also clears a jam)                               |
-| 1–9, 0       | Select weapon slot; mouse wheel / B for next / fire mode |
-| Left Ctrl    | Crouch (hold; you stay down under low ceilings)          |
-| F            | Flashlight on/off (drains the battery shown in the OSD)  |
-| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam     |
+| Input        | Action                                                                      |
+| ------------ | --------------------------------------------------------------------------- |
+| Mouse        | Look                                                                        |
+| W A S D      | Walk                                                                        |
+| Shift        | Sprint (drains stamina)                                                     |
+| Space        | Jump                                                                        |
+| Left mouse   | Fire / swing / throw                                                        |
+| Right mouse  | Aim down sights (rifle: 6× optic)                                           |
+| R            | Reload (also clears a jam)                                                  |
+| 1–9, 0, -    | Select weapon slot (`-` is the RPG-7); mouse wheel / B for next / fire mode |
+| Left Ctrl    | Crouch (hold; you stay down under low ceilings)                             |
+| F            | Flashlight on/off (drains the battery shown in the OSD)                     |
+| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam                        |
 
 Useful URL options (see `src/presentation/url-options.ts`): `?seed=N`, `?quality=low|medium|high`,
 `?fx=none|all|bloom,vignette`, and `?stim=damage:0.5,fear:0.3,emi:0.8` to preview the look reacting to

@@ -4,6 +4,6 @@
   "empty/seed=7/ticks=36000/input=true": "c377e392dd93b51b",
   "churn/seed=1337/ticks=3600/input=false": "5622676d8a47ea57",
   "churn/seed=2024/ticks=10000/input=true": "a37561c4ae9ef522",
-  "sandbox/seed=1337/ticks=3600/input=true": "c429df31041a04d0",
-  "sandbox/seed=99/ticks=36000/input=true": "2fad66aa9b2c0349"
+  "sandbox/seed=1337/ticks=3600/input=true": "dcb2b15752f7ff63",
+  "sandbox/seed=99/ticks=36000/input=true": "dbb009d82bd30395"
 }

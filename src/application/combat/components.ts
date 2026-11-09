@@ -15,8 +15,21 @@ export const Loadout = defineComponent('Loadout', {
   s7: 'u32',
   s8: 'u32',
   s9: 'u32',
+  s10: 'u32',
 });
-export const SLOT_FIELDS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9'] as const;
+export const SLOT_FIELDS = [
+  's0',
+  's1',
+  's2',
+  's3',
+  's4',
+  's5',
+  's6',
+  's7',
+  's8',
+  's9',
+  's10',
+] as const;
 
 /** Ammunition and consumables carried. `infinite` = debug range. */
 export const Ammo = defineComponent('Ammo', {
@@ -28,6 +41,7 @@ export const Ammo = defineComponent('Ammo', {
   emp: 'u16',
   flare: 'u16',
   molotov: 'u16',
+  rpg: 'u16',
   infinite: 'u8',
 });
 
@@ -72,6 +86,19 @@ export const Projectile = defineComponent('Projectile', {
   damage: 'f64',
   travelled: 'f64',
   age: 'f64',
+});
+
+/** A rocket in flight (self-propelled, explodes on impact). */
+export const Rocket = defineComponent('Rocket', {
+  x: 'f64',
+  y: 'f64',
+  z: 'f64',
+  vx: 'f64',
+  vy: 'f64',
+  vz: 'f64',
+  weapon: 'u8',
+  age: 'f64',
+  travelled: 'f64',
 });
 
 /** A thrown grenade/flare/bottle. */

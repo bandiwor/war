@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Hazard, Projectile, Target, Thrown } from '../../../application/combat/components';
+import { Hazard, Projectile, Target, Rocket, Thrown } from '../../../application/combat/components';
 import type { Sandbox } from '../../../application/scenes/sandbox';
 import { HITBOXES } from '../../../domain/combat/hitboxes';
 import { RACES, raceAt, type Race } from '../../../domain/combat/races';
@@ -194,6 +194,35 @@ export class CombatFx {
       this.thrownMeshes.push(m);
       this.group.add(m);
     }
+    // Rockets in flight: body, motor glow (pooled light) and a smoke trail from the particle pool.
+    const rocketGeo = new THREE.CylinderGeometry(0.035, 0.02, 0.6, 8);
+    rocketGeo.rotateX(Math.PI / 2);
+    const rocketMat = new THREE.MeshStandardMaterial({
+      color: 0x3a4032,
+      roughness: 0.5,
+      metalness: 0.4,
+    });
+    const plumeGeo = new THREE.ConeGeometry(0.06, 0.5, 8);
+    plumeGeo.rotateX(-Math.PI / 2);
+    plumeGeo.translate(0, 0, -0.55);
+    const plumeMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(12, 6, 1.5),
+      toneMapped: false,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 2; i++) {
+      const body = new THREE.Mesh(rocketGeo, rocketMat);
+      const plume = new THREE.Mesh(plumeGeo, plumeMat);
+      body.add(plume);
+      body.visible = false;
+      this.rocketMeshes.push({ body, plume });
+      this.group.add(body);
+    }
+    this.group.add(this.rocketLight);
+    this.disposables.push(rocketGeo, rocketMat, plumeGeo, plumeMat);
     this.flareMat = flareMat;
     this.thrownMat = thrownMat;
 
@@ -229,6 +258,9 @@ export class CombatFx {
   }
 
   private readonly flareMat: THREE.MeshBasicMaterial;
+  private readonly rocketMeshes: { body: THREE.Mesh; plume: THREE.Mesh }[] = [];
+  private readonly rocketLight = new THREE.PointLight(0xffa040, 0, 14, 2);
+  private readonly look = new THREE.Vector3();
   private readonly thrownMat: THREE.MeshStandardMaterial;
 
   // --- Event intake -----------------------------------------------------------
@@ -240,11 +272,32 @@ export class CombatFx {
     const w = id === undefined ? undefined : WEAPONS[id];
     if (w?.kind !== 'firearm') return;
     // Pump/bolt guns eject when cycled; for simplicity eject on the shot for all.
+    const casing = AMMO[w.ammo].casing;
+    if (casing === null) {
+      // Caseless rocket: instead of brass, a backblast of smoke and sparks out of the venturi.
+      for (let i = 0; i < 14; i++) {
+        const v = new THREE.Vector3(
+          -e.dx * (4 + Math.random() * 6) + (Math.random() - 0.5) * 2,
+          Math.random() * 1.5,
+          -e.dz * (4 + Math.random() * 6) + (Math.random() - 0.5) * 2,
+        );
+        this.spawnParticle(
+          ejection.x,
+          ejection.y,
+          ejection.z,
+          v,
+          i % 4 === 0,
+          i % 4 === 0 ? 0.006 : 0.1 + Math.random() * 0.1,
+          1.2,
+        );
+      }
+      return;
+    }
     const c = this.casings.find((x) => !x.alive);
     if (c === undefined) return;
     c.alive = true;
     c.landed = false;
-    c.shell = AMMO[w.ammo].casing.shell;
+    c.shell = casing.shell;
     c.pos.copy(ejection);
     c.vel
       .copy(right)
@@ -331,6 +384,7 @@ export class CombatFx {
     this.updateExplosion(dt);
     this.updateHazards();
     this.updateThrown();
+    this.updateRockets(dt);
     this.updateTargets(dt);
     this.paths.visible = this.showPaths;
   }
@@ -462,6 +516,58 @@ export class CombatFx {
       const m = this.hazardMeshes[i];
       if (l) l.intensity = 0;
       if (m) m.visible = false;
+    }
+  }
+
+  private updateRockets(dt: number): void {
+    const store = this.sandbox.simulation.world.tryStore(Rocket);
+    let used = 0;
+    this.rocketLight.intensity = 0;
+    if (store !== null) {
+      const f = store.fields;
+      for (let row = 0; row < store.size && used < this.rocketMeshes.length; row++) {
+        const r = this.rocketMeshes[used++];
+        if (r === undefined) continue;
+        const x = at(f.x, row);
+        const y = at(f.y, row);
+        const z = at(f.z, row);
+        r.body.visible = true;
+        r.body.position.set(x, y, z);
+        r.body.lookAt(this.look.set(x + at(f.vx, row), y + at(f.vy, row), z + at(f.vz, row)));
+        const id = weaponAt(at(f.weapon, row));
+        const w = id === undefined ? undefined : WEAPONS[id];
+        const age = at(f.age, row);
+        const burning =
+          w?.kind === 'firearm' &&
+          w.projectile.kind === 'rocket' &&
+          age >= w.projectile.ignite &&
+          age < w.projectile.burnout;
+        r.plume.visible = burning;
+        if (burning) {
+          this.rocketLight.position.set(x, y, z);
+          this.rocketLight.intensity = 60;
+        }
+        // Smoke trail (denser while the motor burns).
+        if (dt > 0 && (burning || Math.random() < 0.3)) {
+          this.spawnParticle(
+            x,
+            y,
+            z,
+            this.look.set(
+              (Math.random() - 0.5) * 0.6,
+              0.2 + Math.random() * 0.3,
+              (Math.random() - 0.5) * 0.6,
+            ),
+            false,
+            0.08 + Math.random() * 0.08,
+            1.6,
+          );
+        }
+      }
+    }
+    for (let i = used; i < this.rocketMeshes.length; i++) {
+      const r = this.rocketMeshes[i];
+      if (r) r.body.visible = false;
     }
   }
 
@@ -635,6 +741,7 @@ export class CombatFx {
     this.fireball.visible = on;
     for (const m of this.hazardMeshes) m.visible = on;
     for (const m of this.thrownMeshes) m.visible = on;
+    for (const r of this.rocketMeshes) r.body.visible = on;
     this.paths.visible = on || this.showPaths;
   }
 

@@ -29,6 +29,7 @@ import {
   Loadout,
   Projectile,
   Target,
+  Rocket,
   Thrown,
   WeaponItem,
 } from '../combat/components';
@@ -40,8 +41,10 @@ import {
   giveLoadout,
   hazardSystem,
   projectileSystem,
+  reserveKey,
   spawnTargets,
   targetSystem,
+  rocketSystem,
   thrownSystem,
   weaponFireSystem,
   weaponSelectSystem,
@@ -334,6 +337,7 @@ export function createSandbox(
   world.register(WeaponItem);
   world.register(Projectile);
   world.register(Thrown);
+  world.register(Rocket);
   world.register(Hazard);
   world.register(Target);
   const player = world.spawn();
@@ -406,6 +410,7 @@ export function createSandbox(
       weaponSelectSystem(player),
       weaponFireSystem({ player, physics, eye: eyeOf, spendStamina }),
       projectileSystem(physics),
+      rocketSystem(physics),
       thrownSystem(physics),
       hazardSystem(),
       targetSystem(kind === 'range'),
@@ -510,25 +515,8 @@ function readWeaponView(sandbox: Sandbox, out: WeaponView): void {
   out.infinite = arow >= 0 && ammo.fields.infinite[arow] === 1;
   out.reserve = 0;
   if (arow >= 0 && id !== null) {
-    const w = WEAPONS[id];
-    const a = ammo.fields;
-    if (w.kind === 'firearm') {
-      out.reserve = at(
-        w.ammo === '9x19'
-          ? a.r9x19
-          : w.ammo === '5.56x45'
-            ? a.r556
-            : w.ammo === '7.62x51'
-              ? a.r762
-              : a.r12ga,
-        arow,
-      );
-    } else if (w.kind === 'throwable') {
-      out.reserve = at(
-        id === 'frag' ? a.frag : id === 'emp' ? a.emp : id === 'flare' ? a.flare : a.molotov,
-        arow,
-      );
-    }
+    const key = reserveKey(id, WEAPONS[id]);
+    if (key !== null) out.reserve = at(ammo.fields[key], arow);
   }
   const intent = world.store(PlayerIntent);
   const irow = intent.rowOf(sandbox.player);

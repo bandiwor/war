@@ -91,7 +91,8 @@ export function createWeaponState(w: Weapon): WeaponState {
     phase: 'drawing',
     stage: 'magOut',
     timer: w.drawSeconds,
-    mag: loaded ? w.magazine : 0,
+    // Single-shot launchers hold their one round in the tube (the "chamber"), nothing behind it.
+    mag: loaded && w.action !== 'single' ? w.magazine : 0,
     chambered: loaded && w.chamber,
     wear: 0,
     bloomDeg: 0,
@@ -245,11 +246,9 @@ function tickFirearm(
     out.events |= WeaponEvent.MODE_CHANGED;
   }
 
-  if (
-    input.reloadPressed &&
-    (s.mag < capacity || (!s.chambered && w.chamber)) &&
-    input.reserve > 0
-  ) {
+  const full =
+    w.action === 'single' ? s.chambered : s.mag >= capacity && (s.chambered || !w.chamber);
+  if (input.reloadPressed && !full && input.reserve > 0) {
     s.phase = 'reloading';
     s.wasEmpty = !s.chambered;
     s.burstLeft = 0;
@@ -317,7 +316,7 @@ function tickFirearm(
       s.mag--;
       s.chambered = true;
     }
-  } else {
+  } else if (w.action !== 'single') {
     s.phase = 'cycling';
     s.timer = w.cycleSeconds;
   }

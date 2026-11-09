@@ -59,6 +59,37 @@ export function integrate(
   }
 }
 
+/** Rocket sustainer: constant acceleration along the flight direction during [ignite, burnout). */
+export interface Motor {
+  readonly thrust: number;
+  readonly ignite: number;
+  readonly burnout: number;
+}
+
+/**
+ * One simulation tick of a rocket of age `age`: thrust along the velocity
+ * (semi-implicit), then drag and gravity. The simulation and the zeroing
+ * code both call this with the same dt, so sights match flight exactly.
+ */
+export function integrateRocket(
+  s: ProjectileState,
+  dragK: number,
+  motor: Motor,
+  age: number,
+  dt: number,
+): void {
+  if (age >= motor.ignite && age < motor.burnout) {
+    const v = Math.sqrt(s.vx * s.vx + s.vy * s.vy + s.vz * s.vz);
+    if (v > 1e-9) {
+      const k = (motor.thrust * dt) / v;
+      s.vx += s.vx * k;
+      s.vy += s.vy * k;
+      s.vz += s.vz * k;
+    }
+  }
+  integrate(s, dragK, dt, 4);
+}
+
 export interface FlightSample {
   /** Downrange distance (horizontal), height relative to the muzzle, time, speed. */
   range: number;
@@ -78,6 +109,7 @@ export function flyTo(
   elevation: number,
   dragK: number,
   dt = 1 / 600,
+  motor?: Motor,
 ): FlightSample {
   const s: ProjectileState = {
     px: 0,
@@ -92,7 +124,8 @@ export function flyTo(
     const prevX = s.px;
     const prevY = s.py;
     const prevV = speed(s);
-    integrate(s, dragK, dt, 1);
+    if (motor === undefined) integrate(s, dragK, dt, 1);
+    else integrateRocket(s, dragK, motor, t, dt);
     t += dt;
     if (s.px >= range) {
       const f = (range - prevX) / (s.px - prevX);
@@ -118,12 +151,15 @@ export function zeroElevation(
   sightHeight: number,
   muzzleVelocity: number,
   dragK: number,
+  motor?: Motor,
 ): number {
   let lo = 0;
   let hi = 0.05; // ~2.9°: far above anything a firearm needs
+  // Rockets are flown at the simulation tick so the zero matches in-game flight.
+  const dt = motor === undefined ? 1 / 600 : 1 / 60;
   for (let i = 0; i < 50; i++) {
     const mid = (lo + hi) / 2;
-    const h = flyTo(zero, muzzleVelocity, mid, dragK).height;
+    const h = flyTo(zero, muzzleVelocity, mid, dragK, dt, motor).height;
     if (h < sightHeight) lo = mid;
     else hi = mid;
   }

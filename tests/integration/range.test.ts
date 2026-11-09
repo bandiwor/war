@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Ammo, Hazard, Projectile, Target } from '../../src/application/combat/components';
+import { Ammo, Hazard, Projectile, Rocket, Target } from '../../src/application/combat/components';
 import {
   activeWeaponId,
   aimOffset,
@@ -218,6 +218,70 @@ describe('shooting range (stage 4 acceptance, simulation side)', () => {
       return sb.simulation.stateHash();
     };
     expect(session()).toBe(session());
+  });
+});
+
+describe('RPG-7', () => {
+  const health = (sb: Sandbox, race: (typeof RACES)[number], d: number): number => {
+    const t = sb.simulation.world.store(Target);
+    for (let r = 0; r < t.size; r++)
+      if (t.fields.race[r] === RACES.indexOf(race) && t.fields.z[r] === d)
+        return t.fields.health[r] ?? 0;
+    return -1;
+  };
+
+  it('a direct hit destroys the 50 m robot; the rocket flies ~0.3 s and explodes', () => {
+    const sb = range();
+    equip(sb, 'rpg7');
+    const log = newLog();
+    fire(sb, log, aimAt(sb, laneX('robot'), 0.95, 50), true, 120);
+    expect(log.shots).toBe(1);
+    expect(log.explosions).toBe(1);
+    const direct = log.hits.find((h) => h.part !== -1);
+    expect(BODY_PARTS[direct?.part ?? -1]).toBe('chassis');
+    expect(direct?.killed).toBe(true);
+    expect(direct?.time).toBeGreaterThan(0.2);
+    expect(direct?.time).toBeLessThan(0.45);
+    expect(sb.simulation.world.store(Rocket).size).toBe(0);
+  });
+
+  it('splash reaches the next lane: a hit on the 25 m zombie also scorches the robot 4 m away', () => {
+    const sb = range();
+    equip(sb, 'rpg7');
+    const log = newLog();
+    fire(sb, log, aimAt(sb, laneX('zombie'), 1.2, 25), true, 120);
+    expect(log.explosions).toBe(1);
+    expect(health(sb, 'zombie', 25)).toBe(0);
+    expect(health(sb, 'robot', 25)).toBeLessThan(VULNERABILITY.robot.maxHealth);
+    expect(health(sb, 'robot', 25)).toBeGreaterThan(VULNERABILITY.robot.maxHealth * 0.8);
+    expect(health(sb, 'plant', 25)).toBe(VULNERABILITY.plant.maxHealth); // 8 m away: out of the 5 m radius
+  });
+
+  it('inside the arming distance the rocket is a dud', () => {
+    const sb = range();
+    equip(sb, 'rpg7');
+    const log = newLog();
+    fire(sb, log, aimAt(sb, 0, 0.7, 1.2), false, 60); // the bench, 1 m away
+    expect(log.shots).toBe(1);
+    expect(log.explosions).toBe(0);
+    expect(log.impacts).toBe(1);
+  });
+
+  it('fired into the sky it self-destructs at 4.5 s', () => {
+    const sb = range();
+    equip(sb, 'rpg7');
+    const log = newLog();
+    step(sb, [{ type: 'look', yaw: 0, pitch: 0.9 }], log);
+    step(sb, [{ type: 'action', action: 'fire', pressed: true }], log);
+    run(sb, 60 * 4, log, [{ type: 'action', action: 'fire', pressed: false }]);
+    expect(log.explosions).toBe(0);
+    run(sb, 60, log);
+    expect(log.explosions).toBe(1);
+  });
+
+  it('street loadout carries three rockets after the one in the tube', () => {
+    const sb = createSandbox(seed(1), newPhysics());
+    expect(sb.simulation.world.store(Ammo).fields.rpg[0]).toBe(3);
   });
 });
 

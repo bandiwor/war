@@ -29,11 +29,14 @@ export const AmmoSchema = z.object({
   dragK: z.number().nonnegative(),
   /** Supersonic rounds make a crack downrange (audio, AI hearing). */
   supersonic: z.boolean(),
-  casing: z.object({
-    length: z.number().positive(),
-    radius: z.number().positive(),
-    shell: z.boolean(),
-  }),
+  /** Ejected case; null for caseless rounds (rockets). */
+  casing: z
+    .object({
+      length: z.number().positive(),
+      radius: z.number().positive(),
+      shell: z.boolean(),
+    })
+    .nullable(),
 });
 export type Ammo = z.infer<typeof AmmoSchema>;
 
@@ -66,6 +69,14 @@ export const AMMO = {
     supersonic: true,
     casing: { length: 0.07, radius: 0.0105, shell: true },
   },
+  // PG-7V HEAT rocket: 2.2 kg, 85 mm warhead. Launched at 115 m/s; the sustainer takes it to ~295 m/s.
+  pg7v: {
+    label: 'PG-7V HEAT rocket',
+    massGrams: 2200,
+    dragK: 0.00046,
+    supersonic: false,
+    casing: null,
+  },
 } as const satisfies Record<string, Ammo>;
 export type AmmoId = keyof typeof AMMO;
 export function isAmmoId(v: unknown): v is AmmoId {
@@ -73,7 +84,8 @@ export function isAmmoId(v: unknown): v is AmmoId {
 }
 
 /** How a fired round is replaced: gas/recoil (semi/auto), manual bolt, manual pump. */
-const Action = z.enum(['semiauto', 'bolt', 'pump']);
+/** 'single' = one round loaded straight into the tube/chamber, nothing to cycle (launchers). */
+const Action = z.enum(['semiauto', 'bolt', 'pump', 'single']);
 const FireMode = z.enum(['semi', 'auto', 'burst']);
 export type FireMode = z.infer<typeof FireMode>;
 
@@ -84,7 +96,7 @@ const ModelPart = z.object({
   at: z.tuple([z.number(), z.number(), z.number()]),
   material: z.enum(['polymer', 'steel', 'wood', 'brass', 'rubber']),
   /** Detaches for reload animation. */
-  role: z.enum(['body', 'magazine', 'slide', 'bolt', 'pump']).default('body'),
+  role: z.enum(['body', 'magazine', 'slide', 'bolt', 'pump', 'warhead']).default('body'),
 });
 
 const Model = z.object({
@@ -113,7 +125,33 @@ const GunshotSound = z.object({
   body: z.number().min(40).max(2000),
   /** Mechanical action noise 0..1 (slide, bolt carrier). */
   mechanism: z.number().min(0).max(1),
+  /** 'launcher' = booster bang plus sustainer whoosh instead of a muzzle blast. */
+  kind: z.enum(['gun', 'launcher']).default('gun'),
 });
+
+/** What leaves the muzzle: an inert bullet, or a self-propelled explosive rocket. */
+const Projectile = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('bullet') }),
+    z.object({
+      kind: z.literal('rocket'),
+      /** Sustainer acceleration (m/s²) between `ignite` and `burnout` seconds after launch. */
+      thrust: z.number().positive(),
+      ignite: z.number().nonnegative(),
+      burnout: z.number().positive(),
+      /** The fuze arms after this distance; closer impacts are duds. */
+      armMeters: z.number().nonnegative(),
+      /** Self-destruct time (s). */
+      fuseSeconds: z.number().positive(),
+      explosion: z.object({
+        radius: z.number().positive(),
+        damage: z.number().positive(),
+        damageType: z.enum(['explosive', 'emp']),
+      }),
+    }),
+  ])
+  .default({ kind: 'bullet' });
+export type RocketSpec = Extract<z.infer<typeof Projectile>, { kind: 'rocket' }>;
 
 export const FirearmSchema = z.object({
   kind: z.literal('firearm'),
@@ -167,6 +205,7 @@ export const FirearmSchema = z.object({
   sightHeight: z.number().nonnegative(),
   adsZoom: z.number().min(1),
   sound: GunshotSound,
+  projectile: Projectile,
   model: Model,
   attachments: z.array(z.string()),
 });
@@ -584,6 +623,69 @@ const RAW = {
       muzzle: [0, 0, 0.13],
       ejectionPort: [0, 0, 0],
     },
+  },
+  // Appended last: weapon indices are stored in replays and must stay stable.
+  rpg7: {
+    kind: 'firearm',
+    label: 'RPG-7 launcher (PG-7V)',
+    ammo: 'pg7v',
+    magazine: 1,
+    chamber: true,
+    tubeFed: true, // muzzle-loaded one rocket at a time
+    action: 'single',
+    modes: ['semi'],
+    burst: 1,
+    rpm: 60,
+    cycleSeconds: 0.5, // cock the hammer
+    muzzleVelocity: 115,
+    pellets: 1,
+    damage: 600, // direct HEAT hit
+    falloff: { start: 500, end: 900, min: 1 },
+    accuracyMoa: 14,
+    pelletSpreadDeg: 0,
+    spread: {
+      hipDeg: 3,
+      adsDeg: 0.25,
+      movingDeg: 3,
+      bloomPerShotDeg: 0,
+      bloomMaxDeg: 0,
+      bloomRecoveryDegPerSec: 1,
+    },
+    // Recoilless: the backblast balances the launch, the tube only bucks a little.
+    recoil: { pattern: [[1.6, 0.4]], loopFrom: 0, jitter: 0.5, recovery: 5 },
+    reload: { tacticalSeconds: 3.4, emptySeconds: 3.4, shellSeconds: 3.4 },
+    drawSeconds: 1.1,
+    wear: { perShot: 0.002, jamBase: 0, jamAtFullWear: 0, clearSeconds: 1 },
+    zeroMeters: 100,
+    sightHeight: 0.09,
+    adsZoom: 2.7, // PGO-7 optic
+    sound: { blast: 1, body: 110, mechanism: 0.6, kind: 'launcher' },
+    projectile: {
+      kind: 'rocket',
+      thrust: 420,
+      ignite: 0.1,
+      burnout: 0.6,
+      armMeters: 5,
+      fuseSeconds: 4.5,
+      explosion: { radius: 5, damage: 220, damageType: 'explosive' },
+    },
+    model: {
+      parts: [
+        cyl([0.022, 0.022, 0.95], [0, 0.03, 0.05], 'steel'),
+        cyl([0.036, 0.036, 0.32], [0, 0.03, -0.02], 'wood'), // heat shield
+        cyl([0.022, 0.045, 0.16], [0, 0.03, -0.5], 'steel'), // rear venturi
+        box([0.028, 0.1, 0.04], [0, -0.04, 0.2], 'wood'),
+        box([0.028, 0.09, 0.035], [0, -0.035, 0.02], 'wood'),
+        box([0.03, 0.06, 0.12], [-0.045, 0.09, 0.12], 'steel'), // optic
+        cyl([0.02, 0.043, 0.16], [0, 0.03, 0.6], 'steel', 'warhead'),
+        cyl([0.043, 0.012, 0.2], [0, 0.03, 0.78], 'steel', 'warhead'),
+      ],
+      grip: [0, -0.06, 0.2],
+      support: [0, -0.055, 0.02],
+      muzzle: [0, 0.03, 0.9],
+      ejectionPort: [0, 0.03, -0.58], // backblast exits here
+    },
+    attachments: [],
   },
 } as const;
 

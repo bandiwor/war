@@ -9,6 +9,7 @@ import { actionBit } from '../../domain/input/commands';
 import {
   aimVector,
   integrate,
+  integrateRocket,
   sampleCone,
   zeroElevation,
   falloffFactor,
@@ -50,6 +51,7 @@ import {
   Projectile,
   SLOT_FIELDS,
   Target,
+  Rocket,
   Thrown,
   WeaponItem,
 } from './components';
@@ -134,15 +136,18 @@ function entity(raw: number): EntityId {
 // ---------------------------------------------------------------------------
 // Ammo bookkeeping.
 
-type ReserveKey = 'r9x19' | 'r556' | 'r762' | 'r12ga' | 'frag' | 'emp' | 'flare' | 'molotov';
+export type ReserveKey =
+  'r9x19' | 'r556' | 'r762' | 'r12ga' | 'frag' | 'emp' | 'flare' | 'molotov' | 'rpg';
 const AMMO_FIELD: Readonly<Record<AmmoId, ReserveKey>> = {
   '9x19': 'r9x19',
   '5.56x45': 'r556',
   '7.62x51': 'r762',
   '12ga-buck': 'r12ga',
+  pg7v: 'rpg',
 };
 
-function reserveKey(id: WeaponId, w: Weapon): ReserveKey | null {
+/** Which Ammo column feeds a weapon (null = needs none). */
+export function reserveKey(id: WeaponId, w: Weapon): ReserveKey | null {
   switch (w.kind) {
     case 'firearm':
       return AMMO_FIELD[w.ammo];
@@ -184,6 +189,7 @@ export function giveLoadout(world: World, player: EntityId, o: LoadoutOptions): 
   a.emp[arow] = 2;
   a.flare[arow] = 4;
   a.molotov[arow] = 2;
+  a.rpg[arow] = 3;
   a.infinite[arow] = o.infinite ? 1 : 0;
 }
 
@@ -313,7 +319,8 @@ export function weaponFireSystem(deps: FireDeps): System<SimContext> {
   const zeroFor = (id: WeaponId, w: Firearm): number => {
     let z = zero.get(id);
     if (z === undefined) {
-      z = zeroElevation(w.zeroMeters, w.sightHeight, w.muzzleVelocity, AMMO[w.ammo].dragK);
+      const motor = w.projectile.kind === 'rocket' ? w.projectile : undefined;
+      z = zeroElevation(w.zeroMeters, w.sightHeight, w.muzzleVelocity, AMMO[w.ammo].dragK, motor);
       zero.set(id, z);
     }
     return z;
@@ -364,7 +371,9 @@ export function weaponFireSystem(deps: FireDeps): System<SimContext> {
         const rng = ctx.rng.get('weapons');
         sampleCone(aim.x, aim.y, aim.z, out.spreadRad, rng, dir);
         const bore = eye.y - w.sightHeight;
-        for (let p = 0; p < w.pellets; p++) {
+        if (w.projectile.kind === 'rocket')
+          spawnRocket(world, eye.x, bore, eye.z, dir, w, weaponIndex(id));
+        for (let p = 0; p < w.pellets && w.projectile.kind === 'bullet'; p++) {
           if (w.pellets > 1) sampleCone(dir.x, dir.y, dir.z, w.pelletSpreadDeg * DEG, rng, pellet);
           else {
             pellet.x = dir.x;
@@ -427,6 +436,27 @@ function spawnProjectile(
   f.vz[row] = d.z * w.muzzleVelocity;
   f.weapon[row] = weapon;
   f.damage[row] = w.damage;
+}
+
+function spawnRocket(
+  world: World,
+  x: number,
+  y: number,
+  z: number,
+  d: Vec3Mut,
+  w: Firearm,
+  weapon: number,
+): void {
+  const store = world.store(Rocket);
+  const row = store.add(world.spawn());
+  const f = store.fields;
+  f.x[row] = x;
+  f.y[row] = y;
+  f.z[row] = z;
+  f.vx[row] = d.x * w.muzzleVelocity;
+  f.vy[row] = d.y * w.muzzleVelocity;
+  f.vz[row] = d.z * w.muzzleVelocity;
+  f.weapon[row] = weapon;
 }
 
 function spawnThrown(
@@ -881,40 +911,7 @@ function effect(
     case 'explosion': {
       ev.radius = fx.radius;
       ev.kind = fx.damageType === 'emp' ? 1 : 0;
-      const targets = ctx.world.store(Target);
-      const t = targets.fields;
-      for (let row = 0; row < targets.size; row++) {
-        const race = raceAt(at(t.race, row));
-        const cy = at(t.y, row) + archetypeBounds(race).y;
-        const dx = at(t.x, row) - x;
-        const dy = cy - y;
-        const dz = at(t.z, row) - z;
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (d >= fx.radius) continue;
-        // Cover matters: walls between blast and body absorb most of it.
-        origin.x = x;
-        origin.y = y + 0.1;
-        origin.z = z;
-        dir.x = dx / Math.max(d, 1e-6);
-        dir.y = dy / Math.max(d, 1e-6);
-        dir.z = dz / Math.max(d, 1e-6);
-        const covered = d > 0.3 && physics.raycast(origin, dir, d - 0.3, los);
-        const k = (1 - d / fx.radius) ** 2 * (covered ? 0.25 : 1);
-        damageTarget(
-          ctx,
-          targets,
-          row,
-          damageTo(race, fx.damage * k, fx.damageType, null),
-          -1,
-          at(t.x, row),
-          cy,
-          at(t.z, row),
-          weapon,
-          d,
-          0,
-          0,
-        );
-      }
+      blast(ctx, physics, x, y, z, fx.radius, fx.damage, fx.damageType, weapon, los, origin, dir);
       return;
     }
     case 'flare':
@@ -935,6 +932,180 @@ function effect(
       return;
     }
   }
+}
+
+/** Radial blast damage with quadratic falloff; bodies behind cover take a quarter. */
+function blast(
+  ctx: SimContext,
+  physics: PhysicsPort,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  damage: number,
+  type: 'explosive' | 'emp',
+  weapon: number,
+  los: RayHit,
+  origin: Point,
+  dir: Point,
+): void {
+  const targets = ctx.world.store(Target);
+  const t = targets.fields;
+  for (let row = 0; row < targets.size; row++) {
+    const race = raceAt(at(t.race, row));
+    const cy = at(t.y, row) + archetypeBounds(race).y;
+    const dx = at(t.x, row) - x;
+    const dy = cy - y;
+    const dz = at(t.z, row) - z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (d >= radius) continue;
+    // Cover matters: walls between blast and body absorb most of it.
+    origin.x = x;
+    origin.y = y + 0.1;
+    origin.z = z;
+    dir.x = dx / Math.max(d, 1e-6);
+    dir.y = dy / Math.max(d, 1e-6);
+    dir.z = dz / Math.max(d, 1e-6);
+    const covered = d > 0.3 && physics.raycast(origin, dir, d - 0.3, los);
+    const k = (1 - d / radius) ** 2 * (covered ? 0.25 : 1);
+    damageTarget(
+      ctx,
+      targets,
+      row,
+      damageTo(race, damage * k, type, null),
+      -1,
+      at(t.x, row),
+      cy,
+      at(t.z, row),
+      weapon,
+      d,
+      0,
+      0,
+    );
+  }
+}
+
+/**
+ * Rockets: thrust, drag and gravity each tick, then a swept test against the
+ * world and bodies. A direct hit does the warhead's full damage; either way
+ * an armed rocket explodes. Inside the arming distance it is a dud (the
+ * real PG-7 fuze arms a few metres out, protecting the shooter).
+ */
+export function rocketSystem(physics: PhysicsPort): System<SimContext> {
+  const s: ProjectileState = { px: 0, py: 0, pz: 0, vx: 0, vy: 0, vz: 0 };
+  const scratch: HitResult = { t: -1, part: null };
+  const best: TargetHit = { row: -1, t: 0, part: -1 };
+  const hit: RayHit = { distance: 0, surface: null, nx: 0, ny: 0, nz: 0 };
+  const los: RayHit = { distance: 0, surface: null, nx: 0, ny: 0, nz: 0 };
+  const origin: Point = { x: 0, y: 0, z: 0 };
+  const dir: Point = { x: 0, y: 0, z: 0 };
+  const doomed: EntityId[] = [];
+  return {
+    name: 'rockets.step',
+    after: ['projectiles.step'],
+    run(ctx) {
+      const store = ctx.world.store(Rocket);
+      const targets = ctx.world.store(Target);
+      const f = store.fields;
+      doomed.length = 0;
+      for (let row = 0; row < store.size; row++) {
+        const id = weaponAt(at(f.weapon, row));
+        const w = id === undefined ? undefined : WEAPONS[id];
+        if (w?.kind !== 'firearm' || w.projectile.kind !== 'rocket') {
+          doomed.push(entity(store.dense[row] ?? 0));
+          continue;
+        }
+        const spec = w.projectile;
+        const x0 = at(f.x, row);
+        const y0 = at(f.y, row);
+        const z0 = at(f.z, row);
+        s.px = x0;
+        s.py = y0;
+        s.pz = z0;
+        s.vx = at(f.vx, row);
+        s.vy = at(f.vy, row);
+        s.vz = at(f.vz, row);
+        const age = at(f.age, row);
+        integrateRocket(s, AMMO[w.ammo].dragK, spec, age, ctx.dt);
+        const sx = s.px - x0;
+        const sy = s.py - y0;
+        const sz = s.pz - z0;
+        const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
+        origin.x = x0;
+        origin.y = y0;
+        origin.z = z0;
+        dir.x = sx / Math.max(len, 1e-9);
+        dir.y = sy / Math.max(len, 1e-9);
+        dir.z = sz / Math.max(len, 1e-9);
+        const wall = physics.raycast(origin, dir, len, hit) ? hit.distance : len;
+        nearestTarget(targets, x0, y0, z0, dir.x, dir.y, dir.z, wall, scratch, best);
+        const travelled = at(f.travelled, row);
+        const struck = best.row >= 0 || wall < len;
+        if (struck || age + ctx.dt >= spec.fuseSeconds) {
+          const t = best.row >= 0 ? best.t : wall;
+          const hx = x0 + dir.x * t;
+          const hy = y0 + dir.y * t;
+          const hz = z0 + dir.z * t;
+          const armed = travelled + t >= spec.armMeters;
+          if (best.row >= 0) {
+            const race = raceAt(at(targets.fields.race, best.row));
+            // A dud still hits like a 2 kg club.
+            const direct = armed ? w.damage : 25;
+            damageTarget(
+              ctx,
+              targets,
+              best.row,
+              damageTo(race, direct, armed ? 'explosive' : 'blunt', BODY_PARTS[best.part] ?? null),
+              best.part,
+              hx,
+              hy,
+              hz,
+              at(f.weapon, row),
+              travelled + t,
+              0,
+              age + ctx.dt,
+            );
+          } else if (struck) {
+            emitImpact(ctx, hx, hy, hz, hit, 1);
+          }
+          if (armed) {
+            const ev = ctx.events.explosion.emit();
+            // Back the blast centre off the surface so the wall it hit does not shadow it.
+            ev.x = hx - dir.x * 0.15;
+            ev.y = hy - dir.y * 0.15;
+            ev.z = hz - dir.z * 0.15;
+            ev.radius = spec.explosion.radius;
+            ev.kind = spec.explosion.damageType === 'emp' ? 1 : 0;
+            blast(
+              ctx,
+              physics,
+              ev.x,
+              ev.y,
+              ev.z,
+              spec.explosion.radius,
+              spec.explosion.damage,
+              spec.explosion.damageType,
+              at(f.weapon, row),
+              los,
+              origin,
+              dir,
+            );
+          }
+          doomed.push(entity(store.dense[row] ?? 0));
+          continue;
+        }
+        f.x[row] = s.px;
+        f.y[row] = s.py;
+        f.z[row] = s.pz;
+        f.vx[row] = s.vx;
+        f.vy[row] = s.vy;
+        f.vz[row] = s.vz;
+        f.age[row] = age + ctx.dt;
+        f.travelled[row] = travelled + len;
+      }
+      for (const e of doomed) ctx.world.despawn(e);
+    },
+  };
 }
 
 export function hazardSystem(): System<SimContext> {

@@ -30,6 +30,7 @@ const CROSSFADE = 0.5;
 export class AudioEngine implements AudioPort {
   readonly context: AudioContext;
   played = 0;
+  localPlayed = 0;
   distantPlayed = 0;
   levels: Partial<Record<LayerId, number>> = {};
   acoustics: RoomAcoustics | null = null;
@@ -230,6 +231,29 @@ export class AudioEngine implements AudioPort {
     pan.connect(this.send);
     src.start();
     this.played++;
+  }
+
+  /**
+   * Head-locked one-shot for sounds made by the player (own weapon, own
+   * hands). No HRTF: a source a few centimetres from the listener has no
+   * meaningful direction, and the panner would render it as "below the
+   * chin". Still feeds the geometry reverb, so shots ring in the space.
+   */
+  playLocal(buffer: AudioBuffer, gain: number, rate: number, pan = 0, reverb = 1): void {
+    if (!this.running) return;
+    const ctx = this.context;
+    const src = new AudioBufferSourceNode(ctx, { buffer, playbackRate: rate });
+    const g = new GainNode(ctx, { gain });
+    const p = new StereoPannerNode(ctx, { pan });
+    src.connect(g).connect(p);
+    p.connect(this.dry);
+    if (reverb > 0) {
+      const send = new GainNode(ctx, { gain: reverb });
+      p.connect(send).connect(this.send);
+    }
+    src.start();
+    this.played++;
+    this.localPlayed++;
   }
 
   playDistant(

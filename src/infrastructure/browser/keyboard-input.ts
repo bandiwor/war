@@ -24,6 +24,7 @@ const SLOT_KEYS: Readonly<Record<string, number>> = {
   Digit8: 7,
   Digit9: 8,
   Digit0: 9,
+  Minus: 10,
 };
 
 /**

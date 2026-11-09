@@ -11,6 +11,7 @@ import {
   synthesizeGunshot,
   synthesizeImpact,
   synthesizeMechanical,
+  saturate,
 } from './weapon-sounds';
 
 const SR = 48000;
@@ -52,6 +53,56 @@ describe('gunshots', () => {
       return ((e[7] ?? 0) + (e[8] ?? 0)) / e.reduce((a, v) => a + v, 1e-12);
     };
     expect(hi(muffled)).toBeLessThan(hi(open));
+  });
+});
+
+describe('gunshot character (regression for the thin, samey shots)', () => {
+  const level = (b: Float32Array, fromMs: number, toMs: number): number =>
+    20 *
+    Math.log10(rms(b, Math.round((fromMs / 1000) * SR), Math.round((toMs / 1000) * SR)) + 1e-9);
+
+  it('is dense, not a click: the first 300 ms carry real energy', () => {
+    for (const id of ['pistol', 'carbine', 'rifle', 'shotgun'] as const)
+      expect(rms(gun(id), 0, SR * 0.3)).toBeGreaterThan(0.17);
+  });
+
+  it('has a tail that scales with the cartridge: rifle > carbine > pistol at 150–250 ms', () => {
+    const tail = (id: 'pistol' | 'carbine' | 'rifle'): number => level(gun(id), 150, 250);
+    expect(tail('rifle')).toBeGreaterThan(tail('carbine') + 2);
+    expect(tail('carbine')).toBeGreaterThan(tail('pistol') + 2);
+    // …and still decays to silence, with no click at the end.
+    const b = gun('rifle');
+    expect(level(b, 1800, 2000)).toBeLessThan(-50);
+  });
+
+  it('the attack is immediate: the loudest 5 ms window is the first one', () => {
+    for (const id of ['pistol', 'rifle'] as const) {
+      const b = gun(id);
+      expect(level(b, 0, 5)).toBeGreaterThan(level(b, 30, 35));
+    }
+  });
+
+  it('saturate keeps peaks at full scale and raises density; silence stays silent', () => {
+    const b = Float32Array.from({ length: 1000 }, (_, i) => Math.sin(i / 10) * 0.5);
+    const before = rms(b);
+    saturate(b, 3);
+    expect(peak(b)).toBeCloseTo(1, 5);
+    expect(rms(b)).toBeGreaterThan(before * 2);
+    const z = new Float32Array(10);
+    saturate(z, 3);
+    expect(peak(z)).toBe(0);
+  });
+
+  it('RPG-7 launch: a low bang, then a whoosh that is still audible half a second later', () => {
+    const w = WEAPONS.rpg7;
+    if (w.kind !== 'firearm') throw new Error('rpg7');
+    const b = synthesizeGunshot({ ...w.sound, suppressed: false }, SR, 1);
+    expect(Array.from(synthesizeGunshot({ ...w.sound, suppressed: false }, SR, 1))).toEqual(
+      Array.from(b),
+    );
+    expect(peak(b)).toBeLessThanOrEqual(1);
+    expect(level(b, 400, 600)).toBeGreaterThan(level(gun('rifle'), 400, 600) + 6);
+    expect(lowShare(b)).toBeGreaterThan(lowShare(gun('pistol')));
   });
 });
 

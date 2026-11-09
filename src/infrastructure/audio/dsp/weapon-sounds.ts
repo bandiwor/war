@@ -15,6 +15,8 @@ export interface GunshotParams {
   /** 0..1 mechanical action noise. */
   readonly mechanism: number;
   readonly suppressed: boolean;
+  /** 'launcher' = rocket launch (booster bang + sustainer whoosh). */
+  readonly kind?: 'gun' | 'launcher';
 }
 
 type Buf = Float32Array<ArrayBuffer>;
@@ -63,47 +65,146 @@ function tone(
   }
 }
 
+/**
+ * Gunshot as layers, each tied to a physical cause:
+ *  - snap:   the muzzle shock front, a 1–2 ms N-wave with a bright noise edge;
+ *  - bark:   expanding propellant gas, band-limited noise around `body`
+ *            that decays in tens of ms (the weapon's "voice");
+ *  - thump:  low-frequency pressure pulse whose pitch falls as the gas
+ *            bubble expands (bigger bore = lower, longer);
+ *  - tail:   the blast rolling away, noise that gets darker and decays over
+ *            hundreds of ms, with slow flutter and two slap echoes;
+ *  - action: bolt/slide clacks.
+ * The sum is driven into a soft clipper, as a real microphone (and a real
+ * ear) saturates on gunfire: that is what makes it dense and loud instead
+ * of a thin click. Geometry reverb is added at playback.
+ */
 export function synthesizeGunshot(p: GunshotParams, sr: number, seed: number): Buf {
+  if (p.kind === 'launcher') return synthesizeLaunch(p, sr, seed);
   const rng = new WhiteNoise(seed);
-  const out = buffer(sr, 0.9);
-  const energy = p.suppressed ? p.blast * 0.35 : p.blast;
-  // 1. The crack: an N-wave-like pressure spike, broadband, a few ms.
-  const crackLen = Math.round(sr * (0.002 + 0.003 * energy));
-  for (let i = 0; i < crackLen; i++) {
-    const t = i / crackLen;
-    out[i] = (out[i] ?? 0) + (1 - 2 * t) * (1 - t) * 2.2 * energy + rng.next() * 0.6 * energy;
+  const E = p.suppressed ? p.blast * 0.3 : p.blast;
+  const tailDecay = 0.1 + 0.34 * E;
+  const out = buffer(sr, Math.min(2.2, 0.25 + tailDecay * 5.5));
+
+  // Snap: N-wave plus a high-passed noise edge.
+  const snapLen = Math.round(sr * (0.0012 + 0.0012 * E));
+  const hp = new Biquad('highpass', 2500, 0.7, sr);
+  for (let i = 0; i < snapLen * 6 && i < out.length; i++) {
+    const t = i / snapLen;
+    const nwave = t < 1 ? (1 - 2 * t) * 1.6 : 0;
+    out[i] =
+      (out[i] ?? 0) + (nwave + hp.process(rng.next()) * 1.4 * Math.exp(-t / 1.5)) * (0.5 + E);
   }
-  // 2. Blast body: low-passed noise whose decay grows with energy.
-  const lp = new Biquad('lowpass', p.body * (p.suppressed ? 3 : 9), 0.7, sr);
-  const bodyDecay = 0.025 + 0.09 * energy;
-  const n = Math.round(bodyDecay * 7 * sr);
-  for (let i = 0; i < n && i < out.length; i++) {
+
+  // Bark: two noise bands around the weapon's body frequency.
+  const bark = new Biquad('bandpass', p.body * 2.2, 0.7, sr);
+  const edge = new Biquad('bandpass', Math.min(6500, p.body * 9), 0.9, sr);
+  const barkDecay = 0.018 + 0.05 * E;
+  const barkLen = Math.min(out.length, Math.round(barkDecay * 8 * sr));
+  for (let i = 0; i < barkLen; i++) {
     const t = i / sr;
-    out[i] = (out[i] ?? 0) + lp.process(rng.next()) * Math.exp(-t / bodyDecay) * 2.2 * energy;
+    const n = rng.next();
+    out[i] =
+      (out[i] ?? 0) +
+      (bark.process(n) * 3.2 * Math.exp(-t / barkDecay) +
+        edge.process(n) * 1.6 * Math.exp(-t / (barkDecay * 0.45))) *
+        (0.4 + E);
   }
-  // 3. Thump: the low end you feel.
-  tone(out, sr, 0, p.body * 0.5, 0.05 + 0.05 * energy, 0.9 * energy, 0.8);
-  // 4. Action: bolt carrier / slide clacks.
+
+  // Thump: sine falling from 1.6×body to 0.45×body.
+  let ph = 0;
+  const thumpDecay = 0.035 + 0.075 * E;
+  const thumpLen = Math.min(out.length, Math.round(thumpDecay * 7 * sr));
+  for (let i = 0; i < thumpLen; i++) {
+    const t = i / sr;
+    const f = p.body * (0.45 + 1.15 * Math.exp(-t / 0.018));
+    ph += (TAU * f) / sr;
+    out[i] =
+      (out[i] ?? 0) + Math.sin(ph) * Math.exp(-t / thumpDecay) * 1.5 * E * Math.min(1, t / 0.0008);
+  }
+
+  // Tail: darkening noise with flutter (one-pole low-pass whose cutoff closes over time).
+  if (!p.suppressed) {
+    let lp = 0;
+    let flutter = 0;
+    const start = Math.round(0.006 * sr);
+    for (let i = start; i < out.length; i++) {
+      const t = (i - start) / sr;
+      const cutoff = 350 + 4200 * Math.exp(-t / (tailDecay * 0.6));
+      const k = 1 - Math.exp((-TAU * cutoff) / sr);
+      lp += (rng.next() - lp) * k;
+      flutter += (rng.next() - flutter) * 0.0015;
+      out[i] =
+        (out[i] ?? 0) +
+        lp * (1 + 6 * flutter) * Math.exp(-t / tailDecay) * 1.1 * E * Math.min(1, t / 0.004);
+    }
+    // Slap echoes off nearby hard surfaces (ground, walls).
+    for (const [delay, gain] of [
+      [0.021 + rng.unit() * 0.006, 0.28],
+      [0.067 + rng.unit() * 0.02, 0.16],
+    ] as const) {
+      const d = Math.round(delay * sr);
+      const slap = new Biquad('lowpass', 2600, 0.7, sr);
+      const src = Math.round(0.03 * sr);
+      for (let i = 0; i < src && d + i < out.length; i++)
+        out[d + i] = (out[d + i] ?? 0) + slap.process(out[i] ?? 0) * gain;
+    }
+  }
+
+  // Action noise: louder relative to the blast on suppressed weapons.
   if (p.mechanism > 0) {
-    burst(out, sr, rng, 0.012, 3200, 3, 0.004, p.mechanism * (p.suppressed ? 1.2 : 0.6));
-    burst(
-      out,
-      sr,
-      rng,
-      0.045 + rng.unit() * 0.01,
-      2400,
-      2.5,
-      0.006,
-      p.mechanism * (p.suppressed ? 1 : 0.5),
-    );
+    const g = p.mechanism * (p.suppressed ? 1.1 : 0.45);
+    burst(out, sr, rng, 0.014, 3300, 3, 0.004, g);
+    burst(out, sr, rng, 0.048 + rng.unit() * 0.01, 2300, 2.5, 0.006, g * 0.8);
   }
+
   if (p.suppressed) {
-    // Suppressors strip the highs from the blast.
-    const lp2 = new Biquad('lowpass', 1800, 0.7, sr);
-    for (let i = 0; i < out.length; i++) out[i] = lp2.process(out[i] ?? 0);
+    const dark = new Biquad('lowpass', 1500, 0.7, sr);
+    for (let i = 0; i < out.length; i++) out[i] = dark.process(out[i] ?? 0);
   }
-  normalise(out, p.suppressed ? 0.5 : 0.98);
+  saturate(out, p.suppressed ? 1.2 : 1.6 + 2.2 * E);
+  normalise(out, p.suppressed ? 0.45 : 0.98);
   return out;
+}
+
+/** Rocket launch: booster bang, then the sustainer's roaring whoosh flying away. */
+function synthesizeLaunch(p: GunshotParams, sr: number, seed: number): Buf {
+  const rng = new WhiteNoise(seed);
+  const out = buffer(sr, 2.2);
+  // Booster: a dull, heavy bang with backblast.
+  const body = new Biquad('lowpass', p.body * 5, 0.7, sr);
+  let ph = 0;
+  for (let i = 0; i < Math.round(0.5 * sr); i++) {
+    const t = i / sr;
+    ph += (TAU * p.body * (0.4 + 1.2 * Math.exp(-t / 0.03))) / sr;
+    out[i] =
+      body.process(rng.next()) * 3 * Math.exp(-t / 0.07) + Math.sin(ph) * 1.8 * Math.exp(-t / 0.12);
+  }
+  // Sustainer ignites ~0.1 s later: band-passed roar that sweeps down (Doppler, distance) and fades.
+  const roar = new Biquad('bandpass', 900, 0.8, sr);
+  const hiss = new Biquad('highpass', 3000, 0.7, sr);
+  const start = Math.round(0.09 * sr);
+  for (let i = start; i < out.length; i++) {
+    const t = (i - start) / sr;
+    if (i % 64 === 0) roar.set('bandpass', 1300 - 800 * Math.min(1, t / 1.2), 0.8, sr);
+    const n = rng.next();
+    const env = Math.min(1, t / 0.03) * Math.exp(-t / 0.55);
+    out[i] =
+      (out[i] ?? 0) + (roar.process(n) * 2.6 + hiss.process(n) * 0.5 * Math.exp(-t / 0.2)) * env;
+  }
+  burst(out, sr, rng, 0.004, 2800, 3, 0.005, p.mechanism);
+  saturate(out, 2.5);
+  normalise(out, 0.98);
+  return out;
+}
+
+/** Soft clipper: x → tanh(drive·x) on a peak-normalised signal. Adds density without overs. */
+export function saturate(buf: Float32Array, drive: number): void {
+  let max = 0;
+  for (const v of buf) max = Math.max(max, Math.abs(v));
+  if (max === 0) return;
+  const norm = 1 / Math.tanh(drive);
+  for (let i = 0; i < buf.length; i++) buf[i] = Math.tanh(((buf[i] ?? 0) / max) * drive) * norm;
 }
 
 export const MECHANICAL_SOUNDS = [

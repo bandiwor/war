@@ -99,6 +99,43 @@ test('keyboard: number keys select weapons, R reloads', async ({ page }) => {
     .toBe('rifle');
 });
 
+test('own gunshots play head-locked (not through the 3D panner)', async ({ page }) => {
+  await boot(page);
+  await page.mouse.click(240, 135); // unlock audio
+  await ready(page, 'carbine');
+  const before = (await page.evaluate(() => window.__warDebug?.audioStats()))?.localPlayed ?? 0;
+  await page.evaluate(() => window.__warDebug?.fire(false));
+  await expect
+    .poll(async () => (await log(page))?.shots ?? 0, { timeout: 30_000 })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(
+      async () => (await page.evaluate(() => window.__warDebug?.audioStats()))?.localPlayed ?? 0,
+    )
+    .toBeGreaterThan(before);
+});
+
+test('RPG-7: rocket kills the 50 m robot with a direct hit and explodes; the tube is then empty', async ({
+  page,
+}) => {
+  await boot(page);
+  await ready(page, 'rpg7');
+  expect(await page.evaluate(() => window.__warDebug?.weaponState())).toMatchObject({
+    mag: 0,
+    chambered: true,
+  });
+  await page.evaluate(() => window.__warDebug?.aimAt(-2, 0.95, 50));
+  await page.waitForTimeout(500);
+  await page.evaluate(() => window.__warDebug?.fire(true));
+  await expect.poll(async () => (await log(page))?.explosions ?? 0, { timeout: 30_000 }).toBe(1);
+  const direct = (await log(page))?.recent.find((h) => h.part !== 'area');
+  expect(direct).toMatchObject({ weapon: 'rpg7', race: 'robot', killed: true });
+  expect(await page.evaluate(() => window.__warDebug?.weaponState())).toMatchObject({
+    id: 'rpg7',
+    chambered: false,
+  });
+});
+
 test('frag grenade explodes on the range', async ({ page }) => {
   await boot(page);
   await ready(page, 'frag');

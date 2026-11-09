@@ -24,6 +24,8 @@ import {
  * absorption and the geometry-driven reverb (gunshots excite the space).
  */
 const VARIANTS = 3;
+/** Shots fired closer than this to the listener's hands are the player's own. */
+const OWN_SHOT_RADIUS = 1.5;
 
 const SURFACE_IMPACT: Readonly<Record<SurfaceId, ImpactSound>> = {
   asphalt: 'concrete',
@@ -87,7 +89,13 @@ export class WeaponAudio {
       const e = events.shot.at(i);
       const id = e === undefined ? undefined : weaponAt(e.weapon);
       if (e === undefined || id === undefined) continue;
-      this.play(this.gunshots.get(id), e.x, e.y, e.z, 1.6, 1);
+      const dx = e.x - this.hands.x;
+      const dy = e.y - this.hands.y;
+      const dz = e.z - this.hands.z;
+      // Own shots (the muzzle is in our hands) are head-locked; others are positioned in the world.
+      if (dx * dx + dy * dy + dz * dz < OWN_SHOT_RADIUS * OWN_SHOT_RADIUS)
+        this.local(this.gunshots.get(id), 0.9, 0.12, 1.4);
+      else this.play(this.gunshots.get(id), e.x, e.y, e.z, 6, 1);
     }
     for (let i = 0; i < events.weaponFx.size; i++) {
       const e = events.weaponFx.at(i);
@@ -140,8 +148,9 @@ export class WeaponAudio {
   private mechanics(flags: number, id: WeaponId | undefined): void {
     if (id === undefined) return;
     const w = WEAPONS[id];
+    // The player's own hands: head-locked, slightly right of centre, little reverb.
     const at = (k: MechanicalSound, gain = 0.6): void => {
-      this.play(this.mechanical.get(k), this.hands.x, this.hands.y, this.hands.z, gain, 1);
+      this.local(this.mechanical.get(k), gain, 0.2, 0.25);
     };
     if (flags & WeaponEvent.DRY_FIRE) at('dryFire', 0.5);
     if (flags & WeaponEvent.MAG_OUT) at('magOut');
@@ -155,6 +164,19 @@ export class WeaponAudio {
     if (flags & WeaponEvent.MODE_CHANGED) at('modeSwitch', 0.4);
     if (flags & (WeaponEvent.SWING | WeaponEvent.THROW)) at('swing', 0.7);
     if (flags & WeaponEvent.DRAWN) at('draw', 0.3);
+  }
+
+  private local(
+    bank: readonly AudioBuffer[] | undefined,
+    gain: number,
+    pan: number,
+    reverb: number,
+  ): void {
+    if (bank === undefined || bank.length === 0) return;
+    const buffer = bank[this.pick++ % bank.length];
+    if (buffer === undefined) return;
+    this.engine.playLocal(buffer, gain, 0.97 + 0.06 * ((this.pick * 0.618) % 1), pan, reverb);
+    this.played++;
   }
 
   private play(

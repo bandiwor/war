@@ -25,6 +25,7 @@ import {
   speed,
   zeroElevation,
   type ProjectileState,
+  integrateRocket,
 } from './ballistics';
 
 const firearm = (id: 'pistol' | 'carbine' | 'rifle' | 'shotgun'): Firearm => {
@@ -192,5 +193,46 @@ describe('aim, spread and falloff', () => {
     expect(falloffFactor(10, 25, 60, 0.6)).toBe(1);
     expect(falloffFactor(100, 25, 60, 0.6)).toBe(0.6);
     expect(falloffFactor(42.5, 25, 60, 0.6)).toBeCloseTo(0.8);
+  });
+});
+
+describe('RPG-7 rocket flight', () => {
+  const w = WEAPONS.rpg7;
+  if (w.kind !== 'firearm' || w.projectile.kind !== 'rocket')
+    throw new Error('rpg7 must be a rocket launcher');
+  const motor = w.projectile;
+  const k = AMMO[w.ammo].dragK;
+
+  it('leaves at 115 m/s, the sustainer takes it to ~295 m/s, then it coasts', () => {
+    const s: ProjectileState = { px: 0, py: 0, pz: 0, vx: w.muzzleVelocity, vy: 0, vz: 0 };
+    let peak = 0;
+    let atIgnite = 0;
+    for (let i = 0; i < 120; i++) {
+      const age = i / 60;
+      if (age < motor.ignite) atIgnite = speed(s);
+      integrateRocket(s, k, motor, age, 1 / 60);
+      peak = Math.max(peak, speed(s));
+    }
+    expect(atIgnite).toBeCloseTo(115, -1);
+    expect(peak).toBeGreaterThan(270);
+    expect(peak).toBeLessThan(320);
+    expect(speed(s)).toBeLessThan(peak); // coasting after burnout
+  });
+
+  it('reaches 300 m in a little over a second; zeroed at 100 m it is on the sight line there', () => {
+    const el = zeroElevation(w.zeroMeters, w.sightHeight, w.muzzleVelocity, k, motor);
+    const at100 = flyTo(100, w.muzzleVelocity, el, k, 1 / 60, motor);
+    expect(at100.height).toBeCloseTo(w.sightHeight, 2);
+    const at300 = flyTo(300, w.muzzleVelocity, el, k, 1 / 60, motor);
+    expect(at300.time).toBeGreaterThan(1.0);
+    expect(at300.time).toBeLessThan(1.5);
+    expect(at300.height).toBeLessThan(-1); // rockets drop a lot: hold over
+  });
+
+  it('a rocket at rest gets no thrust direction and just falls', () => {
+    const s: ProjectileState = { px: 0, py: 0, pz: 0, vx: 0, vy: 0, vz: 0 };
+    integrateRocket(s, k, motor, 0.2, 1 / 60);
+    expect(s.vx).toBe(0);
+    expect(s.vy).toBeLessThan(0);
   });
 });

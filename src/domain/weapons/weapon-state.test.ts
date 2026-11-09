@@ -228,6 +228,42 @@ describe('reloads', () => {
   });
 });
 
+describe('single-shot launcher (RPG-7)', () => {
+  const rpg = WEAPONS.rpg7;
+  if (rpg.kind !== 'firearm') throw new Error('rpg7');
+
+  it('holds exactly one rocket, fires it, then needs a 3.9 s reload from reserve', () => {
+    const h = new Harness(rpg);
+    h.reserve = 2;
+    expect(roundsLoaded(h.s)).toBe(1);
+    expect(h.tick({ reloadPressed: true }) & WeaponEvent.RELOAD_START).toBe(0); // already loaded
+    h.tick({ trigger: true });
+    expect(h.shots).toBe(1);
+    expect(h.s.phase).toBe('ready'); // nothing to cycle
+    expect(roundsLoaded(h.s)).toBe(0);
+    h.ticks(70); // past the 1 s refire delay
+    expect(h.tick({ trigger: true }) & WeaponEvent.DRY_FIRE).toBeTruthy();
+    h.tick({ trigger: false, reloadPressed: true });
+    h.ticks(Math.round(3.4 / DT) - 5);
+    expect(h.s.phase).toBe('reloading');
+    h.ticks(Math.round(0.5 / DT) + 12);
+    expect(h.s.phase).toBe('ready');
+    expect(roundsLoaded(h.s)).toBe(1);
+    expect(h.s.mag).toBe(0);
+    expect(h.reserve).toBe(1);
+  });
+
+  it('never jams and cannot fire mid-reload', () => {
+    const h = new Harness(rpg);
+    h.tick({ trigger: true });
+    h.tick({ trigger: false, reloadPressed: true });
+    h.ticks(30);
+    h.tick({ trigger: true });
+    expect(h.shots).toBe(1);
+    expect(h.seen(WeaponEvent.JAMMED)).toBe(false);
+  });
+});
+
 describe('wear and jams', () => {
   it('jam probability grows with wear', () => {
     const w = fa('carbine');

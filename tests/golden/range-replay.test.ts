@@ -56,6 +56,11 @@ const SCRIPT: readonly (readonly [number, InputCommand[]])[] = [
   [1, [sel('molotov'), look(0.12, 0)]],
   [0.2, [act('fire', true)]],
   [4.6, [act('fire', false)]], // total is a whole number of seconds: last checkpoint = last tick
+  // Stage 4.1: RPG-7 at the 50 m robot, then reload.
+  [1.5, [sel('rpg7'), look(-0.1, -0.01)]],
+  [0.2, [act('fire', true)]],
+  [1.3, [act('fire', false), act('reload', true)]],
+  [4, [act('reload', false)]],
 ];
 
 function commands(): InputCommand[][] {

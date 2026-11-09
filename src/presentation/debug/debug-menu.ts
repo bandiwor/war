@@ -82,6 +82,8 @@ export interface WarDebugApi {
     enclosure: number | null;
     distantPlayed: number;
     workletReady: boolean;
+    /** Head-locked one-shots played (own weapon and hands). */
+    localPlayed: number;
     heartbeat: number;
   } | null;
 }
@@ -483,6 +485,7 @@ export function installDebugMenu({
         enclosure: director.acoustics?.enclosure ?? null,
         distantPlayed: engine.distantPlayed,
         workletReady: engine.workletReady,
+        localPlayed: engine.localPlayed,
         heartbeat: director.mix.heartbeat.gain,
       };
     },

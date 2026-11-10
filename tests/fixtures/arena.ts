@@ -81,6 +81,21 @@ export function place(
   return spawnMob(sb.simulation.world, sb.ai, id, x, z, facing(x, z, faceX, faceZ));
 }
 
+/** Turns a mob to face (x, z). */
+export function face(sb: Sandbox, e: EntityId, x: number, z: number): void {
+  const t = sb.simulation.world.store(Target);
+  const r = t.rowOf(e);
+  t.fields.yaw[r] = facing(t.fields.x[r] ?? 0, t.fields.z[r] ?? 0, x, z);
+}
+
+/** A bullet's worth of hit: the mob is hurt and knows where it came from. */
+export function hit(sb: Sandbox, e: EntityId, damage: number): void {
+  const t = sb.simulation.world.store(Target);
+  const r = t.rowOf(e);
+  t.fields.health[r] = Math.max(1, (t.fields.health[r] ?? 0) - damage);
+  t.fields.hits[r] = (t.fields.hits[r] ?? 0) + 1;
+}
+
 export function state(sb: Sandbox, e: EntityId) {
   const w = sb.simulation.world;
   const m = w.store(Mob);

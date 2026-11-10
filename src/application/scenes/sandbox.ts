@@ -29,6 +29,7 @@ import { ChunkColliders } from '../world/chunk-colliders';
 import { Mob, PlayerVitals } from '../ai/components';
 import { AiRuntime } from '../ai/runtime';
 import { senseWorldSystem } from '../ai/world-senses';
+import { drivesSystem } from '../ai/drives-system';
 import {
   addVitals,
   attackSystem,
@@ -544,6 +545,7 @@ export function createSandbox(
   const aiSystems: System<SimContext>[] = [
     senseWorldSystem(ai, probe, player),
     perceptionSystem(ai, probe, physics),
+    drivesSystem(ai, probe),
     decisionSystem(ai, probe),
     movementSystem(ai, probe),
     attackSystem(ai, probe, player),

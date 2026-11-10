@@ -77,6 +77,8 @@ export const Mob = defineComponent('Mob', {
   stun: 'f32',
   /** Robots: recent hits, for retreating under fire. */
   underFire: 'f32',
+  /** Aggression after drives (hunger, pack, provocation, territory, night, fear). */
+  aggression: 'f32',
 });
 
 export const SCORE_FIELDS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'] as const;

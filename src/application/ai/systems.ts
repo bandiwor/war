@@ -19,6 +19,8 @@ import {
   scoreActions,
 } from '../../domain/ai/utility';
 import { raceIndex, VULNERABILITY } from '../../domain/combat/races';
+import { FED_PER_BITE, initialHunger } from '../../domain/ai/drives';
+import { entityIndex } from '../../domain/ecs/entity';
 import { atan2, clamp, cos, sin, TAU, wrapAngle } from '../../domain/math/dmath';
 import {
   MOBS,
@@ -94,6 +96,7 @@ const ATTACK = actionIndex('attack');
 const SEARCH = actionIndex('search');
 const FLEE = actionIndex('flee');
 const HOME = actionIndex('home');
+const WARN = actionIndex('warn');
 
 /** Seconds a corpse stays before the spawner clears it; seconds out of range before despawn. */
 export const CORPSE_SECONDS = 25;
@@ -153,6 +156,8 @@ export function spawnMob(
   x: number,
   z: number,
   yaw: number,
+  /** Spawn group: packmates share it (0 = none). */
+  pack = 0,
 ): EntityId {
   const spec = MOBS[id];
   const e = world.spawn();
@@ -181,6 +186,10 @@ export function spawnMob(
   f.action[r] = IDLE;
   f.attackTime[r] = 99;
   f.hitTime[r] = 99;
+  f.pack[r] = pack;
+  f.aggression[r] = spec.temperament.aggression;
+  f.hunger[r] = spec.temperament.hunger > 0 ? initialHunger(entityIndex(e)) : 0;
+  f.leap[r] = -1;
   ai.stats.spawned++;
   return e;
 }
@@ -486,7 +495,7 @@ function decideMob(
   inputs.mobile = spec.body.runSpeed > 0;
   inputs.health = (t.fields.health[tr] ?? 0) / Math.max(1, t.fields.maxHealth[tr] ?? 0);
   inputs.fleeBelow = spec.temperament.fleeBelow;
-  inputs.aggression = spec.temperament.aggression;
+  inputs.aggression = f.aggression[row] ?? spec.temperament.aggression;
   inputs.searchLeft = f.searchLeft[row] ?? 0;
   const hx = (f.homeX[row] ?? 0) - mx;
   const hz = (f.homeZ[row] ?? 0) - mz;
@@ -651,7 +660,8 @@ function moveMob(
     gx = f.lastX[row] ?? 0;
     gz = f.lastZ[row] ?? 0;
     speed = spec.body.walkSpeed * 1.4;
-  } else if (action === ATTACK) {
+  } else if (action === ATTACK || action === WARN) {
+    // Attack and warn both square up to the target (a warning is a growl, not a step).
     face = true;
   } else if (action !== IDLE && (f.hasGoal[row] ?? 0) === 1) {
     gx = f.goalX[row] ?? 0;
@@ -887,6 +897,8 @@ export function attackSystem(
         ev.kind = f.kind[row] ?? 0;
         ev.damage = landed ? spec.attack.damage : 0;
         ev.race = t.fields.race[tr] ?? 0;
+        if (landed && spec.temperament.hunger > 0)
+          f.hunger[row] = Math.max(0, (f.hunger[row] ?? 0) - FED_PER_BITE);
         if (landed && vr >= 0) {
           const v = vitals.fields;
           v.health[vr] = Math.max(0, (v.health[vr] ?? 0) - spec.attack.damage);
@@ -1061,11 +1073,17 @@ export function spawnerSystem(
       if (id === undefined) return;
       const [lo, hi] = MOBS[id].spawn.group;
       const count = Math.min(rng.int(lo, Math.max(lo, hi)), options.population - alive);
+      let pack = 0;
       for (let k = 0; k < count; k++) {
         const ox = sx + (k === 0 ? 0 : rng.range(-3, 3));
         const oz = sz + (k === 0 ? 0 : rng.range(-3, 3));
-        if (ai.nav.walkableAt(ox, oz))
-          spawnMob(world, ai, id, ox, oz, rng.range(-Math.PI, Math.PI));
+        if (!ai.nav.walkableAt(ox, oz)) continue;
+        const e = spawnMob(world, ai, id, ox, oz, rng.range(-Math.PI, Math.PI), pack);
+        // The group is a pack: everyone carries the first member's id.
+        if (pack === 0 && count > 1 && MOBS[id].temperament.pack > 0) {
+          pack = entityIndex(e) + 1;
+          world.store(Mob).fields.pack[world.store(Mob).rowOf(e)] = pack;
+        }
       }
     },
   };

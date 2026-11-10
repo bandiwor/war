@@ -37,8 +37,21 @@ export interface BestiaryApi {
     health: number;
     distance: number;
     scores: Record<string, number>;
+    /** Race state (stage 7): light on it, drives, robot blindness and network, plant latch, the scent under it. */
+    race: {
+      light: number;
+      hunger: number;
+      fear: number;
+      aggression: number;
+      blind: number;
+      informed: boolean;
+      attached: boolean;
+      scent: number;
+    };
   } | null;
-  setAiOverlay(opts: Partial<{ cones: boolean; paths: boolean; nav: boolean }>): void;
+  setAiOverlay(
+    opts: Partial<{ cones: boolean; paths: boolean; nav: boolean; scent: boolean; light: boolean }>,
+  ): void;
   cheat(key: 'god' | 'noclip' | 'heal', on: boolean): void;
 }
 
@@ -335,12 +348,15 @@ export function installBestiaryTab(
   // In-world AI: overlays, cheats, the nearest mob's mind.
   const world = el('fieldset');
   world.append(el('legend', '', 'in the world'));
-  const overlayBoxes: Record<'cones' | 'paths' | 'nav', HTMLInputElement> = {
+  const OVERLAYS = ['cones', 'paths', 'nav', 'scent', 'light'] as const;
+  const overlayBoxes: Record<(typeof OVERLAYS)[number], HTMLInputElement> = {
     cones: el('input'),
     paths: el('input'),
     nav: el('input'),
+    scent: el('input'),
+    light: el('input'),
   };
-  for (const key of ['cones', 'paths', 'nav'] as const) {
+  for (const key of OVERLAYS) {
     const box = overlayBoxes[key];
     box.type = 'checkbox';
     box.addEventListener('change', () => {
@@ -349,7 +365,7 @@ export function installBestiaryTab(
     const label = el(
       'label',
       '',
-      ` ${key === 'cones' ? 'senses' : key === 'nav' ? 'nav grid' : 'paths'} `,
+      ` ${key === 'cones' ? 'senses' : key === 'nav' ? 'nav grid' : key === 'scent' ? 'pheromones' : key === 'light' ? 'light map' : 'paths'} `,
     );
     label.prepend(box);
     world.append(label);
@@ -409,6 +425,16 @@ export function installBestiaryTab(
       health: t.fields.health[tr] ?? 0,
       distance: bestD,
       scores,
+      race: {
+        light: f.light[best] ?? 0,
+        hunger: f.hunger[best] ?? 0,
+        fear: f.fear[best] ?? 0,
+        aggression: f.aggression[best] ?? 0,
+        blind: f.blind[best] ?? 0,
+        informed: f.informed[best] === 1,
+        attached: f.attached[best] === 1,
+        scent: sandbox.ai.pheromone.smell(t.fields.x[tr] ?? 0, t.fields.z[tr] ?? 0, 1),
+      },
     };
   };
 
@@ -426,6 +452,9 @@ export function installBestiaryTab(
         n === null
           ? 'nearest —'
           : `nearest ${n.id} @ ${n.distance.toFixed(1)} m: ${n.action}  awareness ${n.awareness.toFixed(2)}${n.sensing ? '  SENSING' : ''}  hp ${n.health.toFixed(0)}`,
+        n === null
+          ? ''
+          : `  light ${n.race.light.toFixed(2)}  scent ${n.race.scent.toFixed(2)}  hunger ${n.race.hunger.toFixed(2)}  fear ${n.race.fear.toFixed(2)}  aggr ${n.race.aggression.toFixed(2)}${n.race.blind > 0 ? `  BLIND ${n.race.blind.toFixed(1)}s` : ''}${n.race.informed ? '  NET' : ''}${n.race.attached ? '  LATCHED' : ''}`,
         ...(n === null
           ? []
           : Object.entries(n.scores).map(
@@ -458,7 +487,7 @@ export function installBestiaryTab(
       mobCount: () => sandbox.simulation.world.store(Mob).size,
       inspectNearest,
       setAiOverlay(opts) {
-        for (const key of ['cones', 'paths', 'nav'] as const) {
+        for (const key of OVERLAYS) {
           const v = opts[key];
           if (v === undefined) continue;
           presenter.aiOverlay.options[key] = v;

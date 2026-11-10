@@ -14,6 +14,7 @@ import type { InputCommand } from '../domain/input/commands';
 import { AudioEngine } from '../infrastructure/audio/audio-engine';
 import { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 import { WeaponAudio } from '../infrastructure/audio/weapon-audio';
+import { MobAudio } from '../infrastructure/audio/mob-audio';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
 import { TouchInput } from '../infrastructure/browser/touch-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
@@ -96,6 +97,7 @@ async function bootstrap(): Promise<void> {
     audio === null ? null : new SoundscapeDirector(sandbox.layout, sandbox.physics, audio, runSeed);
   const footsteps = audio === null ? null : new FootstepPlayer(audio, runSeed);
   const weaponAudio = audio === null ? null : new WeaponAudio(audio, runSeed);
+  const mobAudio = audio === null ? null : new MobAudio(audio, runSeed);
   if (weaponAudio !== null) {
     presenter.combatFx.onCasingLanded = (x, y, z, shell) => {
       weaponAudio.casingLanded(x, y, z, shell);
@@ -161,6 +163,7 @@ async function bootstrap(): Promise<void> {
       weaponAudio.hands.z = v.z;
       weaponAudio.consume(events);
     }
+    mobAudio?.consume(events);
     session.combat.record(events);
     if (footsteps !== null) {
       for (let i = 0; i < events.footstep.size; i++) {
@@ -179,7 +182,16 @@ async function bootstrap(): Promise<void> {
     present(alpha) {
       presenter.present(alpha);
       const now = performance.now();
-      director?.update(presenter.view, Math.min(0.25, (now - lastFrame) / 1000));
+      const dt = Math.min(0.25, (now - lastFrame) / 1000);
+      director?.update(presenter.view, dt);
+      if (mobAudio !== null) {
+        const v = presenter.view;
+        mobAudio.listener.x = v.x;
+        mobAudio.listener.y = v.y;
+        mobAudio.listener.z = v.z;
+        mobAudio.update(sandbox, dt);
+        mobAudio.interference(v.stimulus.emi, dt);
+      }
       lastFrame = now;
     },
   };

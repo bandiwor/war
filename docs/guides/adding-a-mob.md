@@ -15,14 +15,23 @@ ghoul: {
     sight: null,                        // or { range, fovDeg, needsLight } (0 = thermal, 1 = blind in the dark)
     hearing: 0.5,                       // × a noise's radius; null = deaf
     proximity: 6,                       // metres, through walls; null = none
+    pheromone: null,                    // zombies: { threshold, alarm } — smell the pheromone field instead
   },
   memory: { forget: 6, search: 8 },     // seconds
   attack: { range: 1.3, damage: 20, cooldown: 1.5 },
-  temperament: { aggression: 1, fleeBelow: 0, roam: 10 },
-  utility: { idle: 0.4, wander: 0.5, investigate: 0.8, chase: 1, attack: 1.2, search: 0.6, flee: 0, home: 0.2 },
+  ranged: null,                         // or { kind: 'laser' | 'spit' | 'leap', minRange, range, damage, cooldown }
+  temperament: {
+    aggression: 1, fleeBelow: 0, roam: 10,
+    lightFear: 0.9,                     // avoids lit ground, panics in the flashlight beam
+    territory: 0,                       // defended radius: warns at the edge, attacks inside
+    pack: 0,                            // courage per packmate nearby
+    hunger: 0,                          // hunger per minute (a fed animal rarely attacks first)
+  },
+  tactics: { network: 0, flank: false, cover: false, reinforce: 0 }, // robots
+  utility: { idle: 0.4, wander: 0.5, investigate: 0.8, chase: 1, attack: 1.2, search: 0.6, flee: 0, home: 0.2, warn: 0 },
   spawn: { zones: ['abandonedCity'], weight: 2, group: [1, 3], night: 0.5 },
   animations: ['idle', 'walk', 'run', 'attack', 'hit', 'die', 'alert'],
-  look: { color: 0x4a4436, emissive: 0x000000 },
+  look: { color: 0x4a4436, emissive: 0x0b3a2c, form: 'humanoid' }, // form picks the race details (mob-details.ts)
 },
 ```
 
@@ -32,6 +41,12 @@ ghoul: {
   `src/domain/ai/utility.ts`.
 - **Senses** are what make a race feel different: robots see in a cone and need light, zombies
   sense only up close, animals hear well.
+- **Race behaviour** comes from fields, not code (ADR-0013): `senses.pheromone` makes it follow
+  scent, `lightFear` makes it shun light, `hunger`/`pack`/`territory` give it animal drives,
+  `ranged` gives it a laser, spit or leap, and `tactics` gives it the robots' network, flanking,
+  cover and reinforcements. The lore each race follows is in `docs/lore/races.md`.
+- **Look and sound**: `look.form` picks the details the model is dressed in, and the race picks
+  the voice (`RACE_VOICES` in `src/infrastructure/audio/dsp/mob-sounds.ts`).
 - **Spawn**: `zones` are the hub zones it appears in, `night` shifts it toward night (1) or day
   (−1), and `weight` is relative to the other candidates in the zone.
 
@@ -44,5 +59,6 @@ Check it:
    and poses every mob.
 2. Debug menu → **Bestiary**: the mob is listed automatically. View it on the test stage (bones,
    hitboxes, vision cone, every animation), then press _Spawn 6 m ahead_.
-3. Write a scenario test in `tests/integration/ai.test.ts` for what makes it special, for
+3. Write a scenario test in `tests/integration/<race>s.test.ts` (shared helpers in
+   `tests/fixtures/arena.ts`) for what makes it special, for
    example "the ghoul finds you through a wall at 6 m but not at 8".

@@ -5,7 +5,7 @@ import { Target } from '../../../application/combat/components';
 import { UTILITY_ACTIONS } from '../../../domain/ai/utility';
 import type { EntityId } from '../../../domain/ecs/entity';
 import { MOBS, MOB_IDS, mobAt, type AnimationId, type MobId } from '../../../domain/mobs/registry';
-import { buildMobModel, poseMob, type MobModel } from './mob-models';
+import { buildMobModel, poseMob, signalMob, type MobModel } from './mob-models';
 
 function entity(raw: number): EntityId {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- brand restore: dense rows hold live entity ids
@@ -143,6 +143,13 @@ export class MobRenderer {
         phase: inst.phase,
         alert: f.awareness[row] ?? 0,
       });
+      signalMob(
+        inst.model,
+        time + (e % 13) * 0.21,
+        f.awareness[row] ?? 0,
+        f.blind[row] ?? 0,
+        (f.action[row] ?? 0) === DEAD_ACTION,
+      );
       visible++;
     }
     // Mobs that left the simulation go back to the pool.

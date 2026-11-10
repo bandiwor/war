@@ -62,20 +62,38 @@ test('spawned mobs perceive, decide and act; the inspector shows their utility s
   await boot(page, '&scene=street');
   await page.evaluate(() => {
     window.__warDebug?.cheat('god', true);
-    window.__warDebug?.setAiOverlay({ cones: true, paths: true, nav: true });
-    window.__warDebug?.spawnMob('sentry', 7);
+    window.__warDebug?.setAiOverlay({
+      cones: true,
+      paths: true,
+      nav: true,
+      scent: true,
+      light: true,
+    });
+    // Beyond the 10 m a flashlight can blind it from: it sees us, lit by our own flashlight.
+    window.__warDebug?.spawnMob('sentry', 12);
   });
   await expect
     .poll(() => page.evaluate(() => window.__warDebug?.mobCount() ?? 0), { timeout: 30_000 })
     .toBe(1);
-  // The flashlight is on and the sentry faces us: it sees, then closes in.
+  // It sees, then closes in.
+  const inspect = () => page.evaluate(() => window.__warDebug?.inspectNearest() ?? null);
+  const seen: { n: Awaited<ReturnType<typeof inspect>> } = { n: null };
   await expect
-    .poll(async () => (await page.evaluate(() => window.__warDebug?.inspectNearest()))?.action, {
-      timeout: 30_000,
-    })
-    .toMatch(/chase|attack/);
-  const n = await page.evaluate(() => window.__warDebug?.inspectNearest());
-  expect(n?.sensing).toBe(true);
+    .poll(
+      async () => {
+        const now = await inspect();
+        seen.n = now;
+        return now !== null && now.sensing && /chase|attack/.test(now.action);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  const n = seen.n;
+  expect(n?.race.informed).toBe(false);
+  // Closing in, it walks into the beam: the flashlight in its lens blinds the camera (stage 7).
+  await expect
+    .poll(async () => (await inspect())?.race.blind ?? 0, { timeout: 30_000 })
+    .toBeGreaterThan(0);
   expect(Object.keys(n?.scores ?? {})).toEqual([
     'idle',
     'wander',
@@ -85,7 +103,9 @@ test('spawned mobs perceive, decide and act; the inspector shows their utility s
     'search',
     'flee',
     'home',
+    'warn',
   ]);
+  expect(n?.race.light).toBeGreaterThanOrEqual(0);
   await page.keyboard.press('Backquote');
   const menu = page.getByTestId('debug-menu');
   await menu.getByRole('button', { name: 'Bestiary', exact: true }).click();

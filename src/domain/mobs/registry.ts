@@ -29,6 +29,7 @@ export const FORMS = [
   'wolf',
   'boar',
 ] as const;
+export type Form = (typeof FORMS)[number];
 
 export const MobSpecSchema = z.object({
   label: z.string(),

@@ -4,7 +4,7 @@ import { HITBOXES } from '../../../domain/combat/hitboxes';
 import { ANIMATIONS, MOBS, MOB_IDS } from '../../../domain/mobs/registry';
 import { actionIndex } from '../../../domain/ai/utility';
 import { DEAD_ACTION } from '../../../application/ai/components';
-import { buildMobModel, hitboxWireframe, poseMob } from './mob-models';
+import { buildMobModel, hitboxWireframe, poseMob, signalMob } from './mob-models';
 import { animationFor } from './mob-renderer';
 
 describe('mob models', () => {
@@ -13,12 +13,60 @@ describe('mob models', () => {
       const m = buildMobModel(id);
       let meshes = 0;
       m.root.traverse((o) => {
-        if (o instanceof THREE.Mesh) meshes++;
+        if (o instanceof THREE.Mesh && !o.name.startsWith('detail:')) meshes++;
       });
       expect(meshes, id).toBe(HITBOXES[MOBS[id].race].length);
       expect(m.root.scale.x).toBe(MOBS[id].body.scale);
       expect(hitboxWireframe(id).children).toHaveLength(HITBOXES[MOBS[id].race].length);
     }
+  });
+
+  it('every race is dressed per its lore: details ride on real bones, built once per kind', () => {
+    const names = (id: (typeof MOB_IDS)[number]): string[] => {
+      const out: string[] = [];
+      buildMobModel(id).root.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.name.startsWith('detail:')) out.push(o.name);
+      });
+      return out;
+    };
+    expect(names('shambler')).toEqual(expect.arrayContaining(['detail:cloth', 'detail:fungus']));
+    expect(names('sentry')).toContain('detail:signal');
+    expect(names('flytrap')).toContain('detail:glow'); // bioluminescent vine buds
+    expect(names('wolf').length).toBeGreaterThan(3);
+    expect(buildMobModel('flytrap').bones.has('jaw')).toBe(true);
+    expect(buildMobModel('boar').bones.has('tail')).toBe(true);
+    // Shared geometry across models of a kind.
+    const geo = (id: 'sentry'): unknown[] => {
+      const g: unknown[] = [];
+      buildMobModel(id).root.traverse((o) => {
+        if (o instanceof THREE.Mesh) g.push(o.geometry);
+      });
+      return g;
+    };
+    expect(geo('sentry')).toEqual(geo('sentry'));
+  });
+
+  it('robot tally lights blink and sputter when blinded; dead lights fade', () => {
+    const m = buildMobModel('sentry');
+    const seen = new Set<number>();
+    for (let t = 0; t < 2; t += 0.05) {
+      signalMob(m, t, 1, 0, false);
+      seen.add(Math.round(m.signal.emissiveIntensity * 10));
+    }
+    expect(seen.size).toBeGreaterThan(1);
+    const blind = new Set<number>();
+    for (let t = 0; t < 1; t += 0.013) {
+      signalMob(m, t, 1, 1, false);
+      blind.add(Math.round(m.signal.emissiveIntensity * 10));
+    }
+    expect(blind.size).toBeGreaterThan(seen.size);
+    signalMob(m, 0, 0, 0, false);
+    const lit = m.signal.emissiveIntensity;
+    signalMob(m, 0, 0, 0, true);
+    expect(m.signal.emissiveIntensity).toBeLessThan(lit);
+    const plant = buildMobModel('creeper');
+    signalMob(plant, 1, 0, 0, false);
+    expect(plant.signal.emissiveIntensity).toBeGreaterThan(0);
   });
 
   it('poses every animation without NaNs and returns to rest', () => {

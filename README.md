@@ -11,7 +11,15 @@ tablets get on-screen controls, best in landscape).
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 6, AI and bestiary.** Eight placeholder mobs (two per race), all registry data.
+> Status: **stage 7, the races.** Zombies hunt by smell through a diffusing pheromone field,
+> recruit each other with alarm scent and flee light. Animals have hunger, fear, packs and
+> territory, warn before they attack and fear the flashlight. Plants bite, spit acid that pools
+> and burns, and creepers leap and latch on until shaken off. Robots see through cameras you can
+> blind, share sightings over a network, flank, take cover, call reinforcements, chase flares,
+> and their radio interference disturbs the bodycam. Each race has its own looks in code (fungus
+> and rags, wheels and tally lights, jaws and L-system vines, tusks and tails) and its own sound
+> signature. Lore: [docs/lore/races.md](docs/lore/races.md).
+> Previously: **stage 6, AI and bestiary.** Eight placeholder mobs (two per race), all registry data.
 > A utility AI senses you (camera cones that need light, hearing, short-range scent), remembers
 > where you were, searches, chases, attacks and flees. Mobs path around obstacles on a
 > deterministic nav grid within fixed per-tick budgets, and the open world populates itself zone

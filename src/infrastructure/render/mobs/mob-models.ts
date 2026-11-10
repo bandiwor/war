@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { HITBOXES, type HitShape } from '../../../domain/combat/hitboxes';
 import type { Race } from '../../../domain/combat/races';
 import { MOBS, type AnimationId, type MobId } from '../../../domain/mobs/registry';
+import { FORM_BONES, mobDetails, type DetailMaterial } from './mob-details';
 
 /**
  * Placeholder mob models, built in code from each race's hitbox archetype so
  * what you see is what you hit. Parts hang on named pivots ("bones") that a
  * procedural animator swings: walk/run cycles, attack lunges, hit flinches,
- * death falls. Stage 7 replaces these with the real race models.
+ * death falls. Stage 7 dresses them per race (`mob-details.ts`): clothing
+ * and fungus, wheels and spider legs with tally lights, jaws and L-system
+ * vines, snouts, tusks and tails.
  */
 export interface MobModel {
   readonly id: MobId;
@@ -15,6 +18,9 @@ export interface MobModel {
   /** Pivot per bone name (hips, head, armL, legR, …). */
   readonly bones: ReadonlyMap<string, THREE.Object3D>;
   readonly materials: readonly THREE.Material[];
+  /** Tally lights / sensor (robots) and bioluminescence (plants, fungus): pulsed per frame. */
+  readonly signal: THREE.MeshStandardMaterial;
+  readonly fungus: THREE.MeshStandardMaterial;
   /** Rest rotations, restored before each pose. */
   readonly rest: ReadonlyMap<string, THREE.Euler>;
 }
@@ -126,7 +132,7 @@ export function buildMobModel(id: MobId): MobModel {
   root.name = `mob:${id}`;
   const bones = new Map<string, THREE.Object3D>([['root', root]]);
   const pivots = new Map<string, readonly [number, number, number]>([['root', [0, 0, 0]]]);
-  for (const b of RIGS[race]) {
+  for (const b of [...RIGS[race], ...(FORM_BONES[spec.look.form] ?? [])]) {
     const bone = new THREE.Object3D();
     bone.name = b.name;
     const parentPivot = pivots.get(b.parent) ?? [0, 0, 0];
@@ -152,10 +158,56 @@ export function buildMobModel(id: MobId): MobModel {
     mesh.name = h.part;
     bone.add(mesh);
   });
+  const tint = new THREE.Color(spec.look.color);
+  const cloth = new THREE.MeshStandardMaterial({
+    color: tint.clone().lerp(new THREE.Color(0x2a2c30), 0.6),
+    roughness: 0.95,
+    side: THREE.DoubleSide,
+  });
+  const fungus = new THREE.MeshStandardMaterial({
+    color: 0xb8b48a,
+    roughness: 0.7,
+    emissive: spec.look.emissive,
+    emissiveIntensity: 0.9,
+  });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.5, metalness: 0.6 });
+  const ivory = new THREE.MeshStandardMaterial({ color: 0xd8cfb4, roughness: 0.5 });
+  const signal = new THREE.MeshStandardMaterial({
+    color: 0x220000,
+    emissive: spec.look.emissive,
+    emissiveIntensity: 3,
+    toneMapped: race !== 'robot',
+  });
+  const mats: Readonly<Record<DetailMaterial, THREE.Material>> = {
+    body,
+    cloth,
+    fungus,
+    dark,
+    bone: ivory,
+    signal: race === 'robot' ? signal : glow,
+    glow,
+  };
+  for (const det of mobDetails(id, spec.look.form)) {
+    const bone = bones.get(det.bone) ?? root;
+    const pivot = pivots.get(det.bone) ?? [0, 0, 0];
+    const mesh = new THREE.Mesh(det.geometry, mats[det.material]);
+    mesh.position.set(-pivot[0], -pivot[1], -pivot[2]);
+    mesh.castShadow = det.material !== 'signal' && det.material !== 'glow';
+    mesh.name = `detail:${det.material}`;
+    bone.add(mesh);
+  }
   root.scale.setScalar(spec.body.scale);
   const rest = new Map<string, THREE.Euler>();
   for (const [name, b] of bones) rest.set(name, b.rotation.clone());
-  return { id, root, bones, materials: [body, glow], rest };
+  return {
+    id,
+    root,
+    bones,
+    materials: [body, glow, cloth, fungus, dark, ivory, signal],
+    signal: race === 'robot' ? signal : glow,
+    fungus,
+    rest,
+  };
 }
 
 export interface PoseInput {
@@ -239,6 +291,10 @@ export function poseMob(model: MobModel, input: PoseInput): void {
       break;
   }
 
+  // Tails wag with the gait (and lash when alert); the flytrap's jaw breathes open.
+  rot(model, 'tail', -0.3 + 0.15 * c * amp, 0.35 * Math.sin(time * (input.alert > 0.5 ? 9 : 2.5)));
+  rot(model, 'jaw', -0.35 - 0.12 * Math.sin(time * 0.9));
+
   if (anim === 'attack') {
     // Wind up, strike, recover over ~0.6 s.
     const k =
@@ -259,6 +315,8 @@ export function poseMob(model: MobModel, input: PoseInput): void {
       case 'plant':
         rot(model, 'torso', -0.7 * k);
         rot(model, 'head', -0.2 - 0.6 * k);
+        // Jaws snap shut on the strike, gape on the wind-up.
+        rot(model, 'jaw', k < 0 ? -0.6 : -0.35 * (1 - k));
         break;
       case 'animal':
         rot(model, 'torso', -0.2 * k);
@@ -279,6 +337,35 @@ export function poseMob(model: MobModel, input: PoseInput): void {
     if (race === 'animal') model.root.rotation.z = fall * 1.5;
     else model.root.rotation.x = -fall * 1.45;
     if (race === 'plant') rot(model, 'head', 0.8 * fall);
+  }
+}
+
+/**
+ * Lights per frame: a robot's tally lights blink (faster when hunting) and
+ * its sensor sputters while blinded; plants' and fungus' glow breathes.
+ */
+export function signalMob(
+  model: MobModel,
+  time: number,
+  alert: number,
+  blind: number,
+  dead: boolean,
+): void {
+  const race = MOBS[model.id].race;
+  if (dead) {
+    model.signal.emissiveIntensity = Math.max(0, model.signal.emissiveIntensity - 0.05);
+    return;
+  }
+  if (race === 'robot') {
+    const rate = alert > 0.5 ? 6 : 1.2;
+    const blink = Math.sin(time * Math.PI * 2 * rate) > 0.2 ? 1 : 0.15;
+    // Blinded: the sensor stutters (deterministic flicker from time).
+    const glitch = blind > 0 ? (Math.sin(time * 91) * Math.sin(time * 37) > 0 ? 0.05 : 1.6) : 1;
+    model.signal.emissiveIntensity = 3 * blink * glitch;
+  } else {
+    const breathe = 0.6 + 0.4 * Math.sin(time * (race === 'plant' ? 1.3 : 0.7));
+    model.signal.emissiveIntensity = (race === 'plant' ? 1.2 : 0.6) * breathe;
+    model.fungus.emissiveIntensity = 0.9 * breathe;
   }
 }
 

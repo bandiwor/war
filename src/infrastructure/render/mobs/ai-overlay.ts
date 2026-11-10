@@ -4,6 +4,7 @@ import { Target } from '../../../application/combat/components';
 import type { Sandbox } from '../../../application/scenes/sandbox';
 import type { EntityId } from '../../../domain/ecs/entity';
 import { MOBS, mobAt } from '../../../domain/mobs/registry';
+import { ALARM, PHEROMONE, PREY } from '../../../domain/ai/pheromone';
 
 function entity(raw: number): EntityId {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- brand restore: dense rows hold live entity ids
@@ -14,19 +15,33 @@ export interface AiOverlayOptions {
   cones: boolean;
   paths: boolean;
   nav: boolean;
+  /** The pheromone field (zombies' nose): prey scent magenta, alarm yellow. */
+  scent: boolean;
+  /** The light map mobs read (light-shy mobs avoid bright ground). */
+  light: boolean;
 }
 
 /**
  * Debug view of the AI: vision cones (red while the mob sees its target,
  * amber otherwise), each mob's remaining path, and the nav grid around the
- * player (green walkable, red blocked). Rebuilt a few times per second.
+ * player (green walkable, red blocked), the pheromone field (stage 7: prey
+ * scent magenta, alarm yellow) and the light map (white = lit enough to
+ * repel a light-shy mob). Rebuilt a few times per second.
  */
 export class AiOverlay {
   readonly group = new THREE.Group();
-  readonly options: AiOverlayOptions = { cones: false, paths: false, nav: false };
+  readonly options: AiOverlayOptions = {
+    cones: false,
+    paths: false,
+    nav: false,
+    scent: false,
+    light: false,
+  };
   private readonly lines: THREE.LineSegments;
   private readonly points: THREE.Points;
   private frame = 0;
+  /** What was drawn last rebuild (tests, debug HUD). */
+  readonly stats = { segments: 0, points: 0 };
 
   constructor(private readonly sandbox: Sandbox) {
     this.lines = new THREE.LineSegments(
@@ -56,7 +71,8 @@ export class AiOverlay {
   }
 
   get active(): boolean {
-    return this.options.cones || this.options.paths || this.options.nav;
+    const o = this.options;
+    return o.cones || o.paths || o.nav || o.scent || o.light;
   }
 
   update(playerX: number, playerZ: number): void {
@@ -153,6 +169,40 @@ export class AiOverlay {
         }
       }
     }
+    if (this.options.scent) {
+      const field = this.sandbox.ai.pheromone;
+      const cell = PHEROMONE.cell;
+      for (let k = 0; k < field.size; k++) {
+        for (let i = 0; i < field.size; i++) {
+          const x = (field.ox + i + 0.5) * cell;
+          const z = (field.oz + k + 0.5) * cell;
+          const prey = field.at(PREY, x, z);
+          const alarm = field.at(ALARM, x, z);
+          if (prey + alarm < 0.01) continue;
+          const p = Math.min(3, prey * 2);
+          const a = Math.min(3, alarm * 2);
+          ppos.push(x, this.sandbox.ai.nav.floorAt(x, z) + 0.15, z);
+          pcol.push(p + a, a * 0.9, p);
+        }
+      }
+    }
+    if (this.options.light) {
+      const lights = this.sandbox.ai.lights;
+      const cx = Math.floor(playerX);
+      const cz = Math.floor(playerZ);
+      for (let dz = -20; dz <= 20; dz += 2) {
+        for (let dx = -20; dx <= 20; dx += 2) {
+          const x = cx + dx + 0.5;
+          const z = cz + dz + 0.5;
+          const l = Math.min(1, lights.at(x, z));
+          ppos.push(x, this.sandbox.ai.nav.floorAt(x, z) + 0.1, z);
+          // Above 0.5 a fully light-shy mob will not step there: white-hot; below, blue dusk.
+          pcol.push(...(l > 0.5 ? [3, 3, 2.5] : [0.15 + l, 0.2 + l, 0.6 + l]));
+        }
+      }
+    }
+    this.stats.segments = pos.length / 6;
+    this.stats.points = ppos.length / 3;
     this.lines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     this.lines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     this.points.geometry.setAttribute('position', new THREE.Float32BufferAttribute(ppos, 3));

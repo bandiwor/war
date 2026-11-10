@@ -10,6 +10,7 @@ import {
 import type { BodycamPresenter } from '../../infrastructure/render/bodycam-presenter';
 import { FRAME_BUDGETS } from '../../infrastructure/render/budgets';
 import { installWorldTab, type WorldDebugApi } from './world-tab';
+import { installBestiaryTab, type BestiaryApi } from './bestiary-tab';
 import { QUALITY_PRESETS } from '../../infrastructure/render/quality';
 import { downloadReplay, playReplayFile, type GameSession } from '../session';
 import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
@@ -83,6 +84,14 @@ export interface WarDebugApi {
   setEnv: WorldDebugApi['setEnv'];
   teleport: WorldDebugApi['teleport'];
   setChunkOverlay: WorldDebugApi['setChunkOverlay'];
+  bestiary: BestiaryApi['bestiary'];
+  previewMob: BestiaryApi['previewMob'];
+  previewState: BestiaryApi['previewState'];
+  spawnMob: BestiaryApi['spawnMob'];
+  mobCount: BestiaryApi['mobCount'];
+  inspectNearest: BestiaryApi['inspectNearest'];
+  setAiOverlay: BestiaryApi['setAiOverlay'];
+  cheat: BestiaryApi['cheat'];
   audioStats(): {
     zones: Partial<Record<string, number>>;
     levels: Partial<Record<string, number>>;
@@ -353,6 +362,15 @@ export function installDebugMenu({
   // --- World ----------------------------------------------------------------
   const worldTab = installWorldTab(addSection('World'), session.sandbox, presenter, queue);
 
+  // --- Bestiary ---------------------------------------------------------------
+  const bestiaryTab = installBestiaryTab(
+    addSection('Bestiary'),
+    session.sandbox,
+    presenter,
+    queue,
+    () => !panel.hidden,
+  );
+
   // --- Audio ----------------------------------------------------------------
   const audioTab = addSection('Audio');
   const audioInfo = el('pre');
@@ -506,6 +524,7 @@ export function installDebugMenu({
     },
     selectWeapon,
     ...worldTab.api,
+    ...bestiaryTab.api,
     aimAt(x, y, z) {
       const v = presenter.view;
       const yaw = Math.atan2(-(x - v.x), -(z - v.z));
@@ -560,7 +579,11 @@ export function installDebugMenu({
   };
 
   const view = createRenderView();
+  let lastRefresh = performance.now();
   const refresh = (): void => {
+    const now = performance.now();
+    bestiaryTab.refresh(Math.min(0.1, (now - lastRefresh) / 1000));
+    lastRefresh = now;
     if (!panel.hidden) {
       const v = readRenderView(session.sandbox, 1, view);
       simInfo.textContent = [

@@ -1,3 +1,5 @@
+import { Mob } from '../ai/components';
+import { MOBS, mobAt } from '../../domain/mobs/registry';
 import { RACES, VULNERABILITY, damageTo, raceAt, raceIndex } from '../../domain/combat/races';
 import { BODY_PARTS } from '../../domain/combat/races';
 import { intersectArchetype, archetypeBounds, type HitResult } from '../../domain/combat/hitboxes';
@@ -491,6 +493,7 @@ interface TargetHit {
 /** Nearest living target hit along a segment (origin + t·dir, t ≤ maxT), written into `best`. */
 function nearestTarget(
   targets: ComponentStore<typeof Target.schema>,
+  mobs: ComponentStore<typeof Mob.schema> | null,
   ox: number,
   oy: number,
   oz: number,
@@ -507,6 +510,11 @@ function nearestTarget(
   const f = targets.fields;
   for (let row = 0; row < targets.size; row++) {
     if (at(f.health, row) <= 0) continue;
+    const mrow = mobs === null ? -1 : mobs.rowOf(entity(targets.dense[row] ?? 0));
+    const scale =
+      mobs === null || mrow < 0
+        ? 1
+        : MOBS[mobAt(at(mobs.fields.kind, mrow)) ?? 'shambler'].body.scale;
     intersectArchetype(
       raceAt(at(f.race, row)),
       at(f.x, row),
@@ -521,6 +529,7 @@ function nearestTarget(
       dz,
       best.t,
       scratch,
+      scale,
     );
     if (scratch.t >= 0 && scratch.t < best.t) {
       best.row = row;
@@ -613,6 +622,7 @@ function meleeSweep(
       const wall = physics.raycast(origin, dir, w.reach, hit) ? hit.distance : w.reach;
       nearestTarget(
         targets,
+        ctx.world.tryStore(Mob),
         origin.x,
         origin.y,
         origin.z,
@@ -702,6 +712,7 @@ export function projectileSystem(physics: PhysicsPort): System<SimContext> {
           const wall = physics.raycast(origin, dir, len, hit) ? hit.distance : len;
           nearestTarget(
             targets,
+            ctx.world.tryStore(Mob),
             origin.x,
             origin.y,
             origin.z,
@@ -817,6 +828,7 @@ export function thrownSystem(physics: PhysicsPort): System<SimContext> {
           // Bodies stop thrown objects too: bottles break on them, grenades bounce off.
           nearestTarget(
             ctx.world.store(Target),
+            ctx.world.tryStore(Mob),
             origin.x,
             origin.y,
             origin.z,
@@ -1038,7 +1050,19 @@ export function rocketSystem(physics: PhysicsPort): System<SimContext> {
         dir.y = sy / Math.max(len, 1e-9);
         dir.z = sz / Math.max(len, 1e-9);
         const wall = physics.raycast(origin, dir, len, hit) ? hit.distance : len;
-        nearestTarget(targets, x0, y0, z0, dir.x, dir.y, dir.z, wall, scratch, best);
+        nearestTarget(
+          targets,
+          ctx.world.tryStore(Mob),
+          x0,
+          y0,
+          z0,
+          dir.x,
+          dir.y,
+          dir.z,
+          wall,
+          scratch,
+          best,
+        );
         const travelled = at(f.travelled, row);
         const struck = best.row >= 0 || wall < len;
         if (struck || age + ctx.dt >= spec.fuseSeconds) {
@@ -1169,9 +1193,12 @@ export function targetSystem(respawn: boolean): System<SimContext> {
     after: ['hazards.step'],
     run(ctx) {
       const targets = ctx.world.store(Target);
+      const mobs = ctx.world.tryStore(Mob);
       const t = targets.fields;
       for (let row = 0; row < targets.size; row++) {
         if (at(t.health, row) > 0) continue;
+        // Mobs die for good (the spawner clears corpses); range dummies come back.
+        if (mobs !== null && mobs.rowOf(entity(targets.dense[row] ?? 0)) >= 0) continue;
         const dead = at(t.dead, row) + ctx.dt;
         t.dead[row] = dead;
         if (respawn && dead >= RANGE_RESPAWN_SECONDS) {

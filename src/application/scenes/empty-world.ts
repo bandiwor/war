@@ -63,6 +63,8 @@ export function intentSystem(player: EntityId): System<SimContext> {
             break;
           case 'env':
           case 'teleport':
+          case 'spawn':
+          case 'cheat':
             break; // world commands: handled by the world systems of scenes that have them
 
           default:

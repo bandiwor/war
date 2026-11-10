@@ -68,22 +68,22 @@ never touches the state hash.
 
 ## Folder map
 
-| Path                         | Contents                                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `src/domain/core`            | Branded types (`Seed`, `Tick`), `assertNever`, `invariant`                                                              |
-| `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`                                                                |
-| `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule`                                                           |
-| `src/domain/input`           | `InputCommand` discriminated union + Zod schema                                                                         |
-| `src/domain/procgen`         | Tileable noise, material recipe registry, texture baker                                                                 |
-| `src/domain/bodycam`         | Bodycam effect registry, gameplay stimulus modulation                                                                   |
-| `src/domain/world`           | World map (hubs, roads), chunk grid + generator, clock/weather, street & range layouts                                  |
-| `src/infrastructure/render`  | WebGL presenter, render graph, post pipeline, effects, scene; `world/`: chunk workers, streaming, light pool, sky, rain |
-| `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`; `world/`: collider streaming, environment system                           |
-| `src/infrastructure/browser` | rAF frame source, keyboard/mouse and touch input                                                                        |
-| `src/presentation`           | Browser composition root, OSD, `debug/`                                                                                 |
-| `src/headless`               | Node runner and CLI                                                                                                     |
-| `tests/golden`               | Golden hashes and replay files                                                                                          |
-| `tests/fixtures`             | Test-only worlds (e.g. the churn stress world)                                                                          |
-| `eslint/architecture.js`     | Layer and determinism lint rules                                                                                        |
-| `scripts/`                   | Perf gate, bundle check                                                                                                 |
-| `docs/adr`                   | Architecture decision records                                                                                           |
+| Path                         | Contents                                                                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/core`            | Branded types (`Seed`, `Tick`), `assertNever`, `invariant`                                                                                                          |
+| `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`                                                                                                            |
+| `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule`                                                                                                       |
+| `src/domain/input`           | `InputCommand` discriminated union + Zod schema                                                                                                                     |
+| `src/domain/procgen`         | Tileable noise, material recipe registry, texture baker                                                                                                             |
+| `src/domain/bodycam`         | Bodycam effect registry, gameplay stimulus modulation                                                                                                               |
+| `src/domain/world`           | World map (hubs, roads), chunk grid + generator, clock/weather, street & range layouts                                                                              |
+| `src/infrastructure/render`  | WebGL presenter, render graph, post pipeline, effects, scene; `world/`: chunk workers, streaming, light pool, sky, rain; `mobs/`: procedural mob models, AI overlay |
+| `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`; `world/`: collider streaming, environment system                                                                       |
+| `src/infrastructure/browser` | rAF frame source, keyboard/mouse and touch input                                                                                                                    |
+| `src/presentation`           | Browser composition root, OSD, `debug/`                                                                                                                             |
+| `src/headless`               | Node runner and CLI                                                                                                                                                 |
+| `tests/golden`               | Golden hashes and replay files                                                                                                                                      |
+| `tests/fixtures`             | Test-only worlds (e.g. the churn stress world)                                                                                                                      |
+| `eslint/architecture.js`     | Layer and determinism lint rules                                                                                                                                    |
+| `scripts/`                   | Perf gate, bundle check                                                                                                                                             |
+| `docs/adr`                   | Architecture decision records                                                                                                                                       |

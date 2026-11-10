@@ -133,9 +133,11 @@ export class SoundscapeDirector {
       (env.active
         ? nightness(sunElevation(env.timeOfDay))
         : clamp(NIGHT_START + ((1 - NIGHT_START) * view.simTime) / NIGHT_RAMP_SECONDS, 0, 1));
-    c.danger = o.danger ?? 0;
-    c.enemyProximity = o.enemyProximity ?? 0;
-    c.health = o.health ?? 1;
+    // The situation comes from the simulation: aware hostiles nearby, the player's health.
+    const vitals = view.vitals;
+    c.danger = o.danger ?? clamp(vitals.threat * 1.2, 0, 1);
+    c.enemyProximity = o.enemyProximity ?? vitals.threat;
+    c.health = o.health ?? (vitals.down ? 0 : vitals.health / Math.max(1, vitals.maxHealth));
     c.rain = o.rain ?? (env.active ? env.weather.rain : 0);
     c.wind = o.wind ?? (env.active ? env.weather.wind : TYPICAL_WIND);
     // Covered + enclosed reads as "indoors" (tunnel, interior); a street canyon is not.

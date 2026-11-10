@@ -1,5 +1,5 @@
 import type { Seed } from '../../domain/core/brand';
-import { generateChunk } from '../../domain/world/chunk-gen';
+import { generateChunk, type ChunkContent } from '../../domain/world/chunk-gen';
 import {
   chunkCoord,
   chunkKey,
@@ -34,6 +34,12 @@ export const COLLIDER_STREAMING = {
   unloadsPerTick: 2,
 } as const;
 
+/** Told when a chunk's content becomes solid or goes away (the AI's nav grid follows). */
+export interface ChunkListener {
+  loaded(content: ChunkContent): void;
+  unloaded(cx: number, cz: number): void;
+}
+
 export class ChunkColliders {
   private readonly loaded = new Map<ChunkKey, readonly ColliderId[]>();
   private readonly wanted: ChunkKey[] = [];
@@ -48,6 +54,7 @@ export class ChunkColliders {
   constructor(
     private readonly seed: Seed,
     private readonly physics: PhysicsPort,
+    private readonly listener: ChunkListener | null = null,
   ) {}
 
   get loadedCount(): number {
@@ -116,6 +123,7 @@ export class ChunkColliders {
   private load(key: ChunkKey): void {
     const content = generateChunk(this.seed, chunkX(key), chunkZ(key));
     this.loaded.set(key, buildStaticColliders(content, this.physics));
+    this.listener?.loaded(content);
     this.loadsTotal++;
   }
 
@@ -124,6 +132,7 @@ export class ChunkColliders {
     if (ids === undefined) return;
     for (const id of ids) this.physics.removeCollider(id);
     this.loaded.delete(key);
+    this.listener?.unloaded(chunkX(key), chunkZ(key));
     this.unloadsTotal++;
   }
 }

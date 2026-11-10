@@ -2,6 +2,7 @@ import { at, defineComponent } from '../../domain/ecs/component';
 import type { EntityId } from '../../domain/ecs/entity';
 import type { System } from '../../domain/ecs/schedule';
 import { World } from '../../domain/ecs/world';
+import { cos, sin } from '../../domain/math/dmath';
 import { actionBit } from '../../domain/input/commands';
 import type { Seed } from '../../domain/core/brand';
 import { generateStreetLayout, type StreetLayout } from '../../domain/world/street-layout';
@@ -25,6 +26,18 @@ import { PlayerIntent, SelectIntent, TICK_RATE, intentSystem } from './empty-wor
 import { generateRangeLayout } from '../../domain/world/range-layout';
 import { generateWorldLayout } from '../../domain/world/world-layout';
 import { ChunkColliders } from '../world/chunk-colliders';
+import { Mob, PlayerVitals } from '../ai/components';
+import { AiRuntime } from '../ai/runtime';
+import {
+  addVitals,
+  attackSystem,
+  decisionSystem,
+  movementSystem,
+  perceptionSystem,
+  spawnerSystem,
+  vitalsSystem,
+  type PlayerProbe,
+} from '../ai/systems';
 import {
   createEnvironmentView,
   Environment,
@@ -105,6 +118,9 @@ export const Motor = defineComponent('Motor', {
 
 export const Flashlight = defineComponent('Flashlight', { on: 'u8', battery: 'f32' });
 
+/** Living mobs the open world keeps around the player. */
+export const WORLD_POPULATION = 12;
+
 /** Seconds of continuous use from full charge. */
 export const BATTERY_SECONDS = 20 * 60;
 /** Landings slower than this are silent. */
@@ -163,6 +179,28 @@ function motorSystem(player: EntityId, physics: PhysicsPort, t: PlayerTuning): S
       // Aiming down sights: deliberate, slower movement.
       input.speedScale = (buttons & AIM) !== 0 ? 0.6 : 1;
 
+      const vitals = ctx.world.store(PlayerVitals);
+      const vrow = vitals.rowOf(player);
+      if (vrow >= 0 && vitals.fields.noclip[vrow] === 1) {
+        // Noclip (debug): fly along the view, through walls, no gravity.
+        physics.characterFeet(id, feet);
+        const pitch = at(i.pitch, irow);
+        const fly = (input.sprint ? 14 : 6) * ctx.dt;
+        const fx = -sin(input.yaw) * cos(pitch);
+        const fz = -cos(input.yaw) * cos(pitch);
+        const sx = cos(input.yaw);
+        const sz = -sin(input.yaw);
+        physics.setCharacterFeet(id, [
+          feet.x + (fx * input.forward + sx * input.strafe) * fly,
+          Math.max(-0.5, feet.y + sin(pitch) * input.forward * fly),
+          feet.z + (fz * input.forward + sz * input.strafe) * fly,
+        ]);
+        m.vx[row] = 0;
+        m.vy[row] = 0;
+        m.vz[row] = 0;
+        m.grounded[row] = 1;
+        return;
+      }
       stepMotor(state, input, t, ctx.dt, out);
       feedback.heightApplied = physics.setCharacterHeight(id, out.height);
       physics.moveCharacter(id, out.dx, out.dy, out.dz, move);
@@ -305,9 +343,38 @@ function flashlightSystem(player: EntityId): System<SimContext> {
   };
 }
 
+/** Debug teleports (every scene). Before the motor, so the move applies this tick. */
+function teleportSystem(player: EntityId, physics: PhysicsPort): System<SimContext> {
+  return {
+    name: 'player.teleport',
+    after: ['input.intent'],
+    before: ['player.motor'],
+    run(ctx) {
+      const commands = ctx.commands;
+      for (let i = 0; i < commands.length; i++) {
+        const c = commands[i];
+        if (c?.type !== 'teleport') continue;
+        const pose = ctx.world.store(Pose);
+        const row = pose.rowOf(player);
+        const motor = ctx.world.store(Motor);
+        const mrow = motor.rowOf(player);
+        if (row < 0 || mrow < 0) return;
+        physics.setCharacterFeet(characterId(at(motor.fields.character, mrow)), [c.x, c.y, c.z]);
+        const p = pose.fields;
+        p.x[row] = p.prevX[row] = c.x;
+        p.y[row] = p.prevY[row] = c.y;
+        p.z[row] = p.prevZ[row] = c.z;
+        motor.fields.vx[mrow] = 0;
+        motor.fields.vy[mrow] = 0;
+        motor.fields.vz[mrow] = 0;
+      }
+    },
+  };
+}
+
 /**
- * Debug teleports, then collider streaming around the player's feet. Runs
- * before the motor so the floor under a teleported player already exists.
+ * Collider streaming around the player's feet. After teleports and before
+ * the motor, so the floor under a teleported player already exists.
  */
 function worldStreamingSystem(
   player: EntityId,
@@ -317,29 +384,13 @@ function worldStreamingSystem(
   const feet: Point = { x: 0, y: 0, z: 0 };
   return {
     name: 'world.streaming',
-    after: ['input.intent'],
+    after: ['player.teleport'],
     before: ['player.motor'],
     run(ctx) {
-      const pose = ctx.world.store(Pose);
-      const row = pose.rowOf(player);
       const motor = ctx.world.store(Motor);
       const mrow = motor.rowOf(player);
-      if (row < 0 || mrow < 0) return;
-      const id = characterId(at(motor.fields.character, mrow));
-      const commands = ctx.commands;
-      for (let i = 0; i < commands.length; i++) {
-        const c = commands[i];
-        if (c?.type !== 'teleport') continue;
-        physics.setCharacterFeet(id, [c.x, c.y, c.z]);
-        const p = pose.fields;
-        p.x[row] = p.prevX[row] = c.x;
-        p.y[row] = p.prevY[row] = c.y;
-        p.z[row] = p.prevZ[row] = c.z;
-        motor.fields.vx[mrow] = 0;
-        motor.fields.vy[mrow] = 0;
-        motor.fields.vz[mrow] = 0;
-      }
-      physics.characterFeet(id, feet);
+      if (mrow < 0) return;
+      physics.characterFeet(characterId(at(motor.fields.character, mrow)), feet);
       colliders.update(feet.x, feet.z);
     },
   };
@@ -359,12 +410,16 @@ export interface Sandbox {
   readonly kind: SandboxKind;
   /** Collider streaming (open world only). */
   readonly chunks: ChunkColliders | null;
+  /** AI services: nav grid, paths, budgets, counters. */
+  readonly ai: AiRuntime;
 }
 
 export type SandboxKind = 'street' | 'range' | 'world';
 
 export interface SandboxOptions {
   readonly kind?: SandboxKind;
+  /** A hand-made layout instead of the kind's generator (AI scenario tests, later the editor). */
+  readonly layout?: StreetLayout;
   readonly tuning?: PlayerTuning;
 }
 
@@ -377,13 +432,27 @@ export function createSandbox(
   const kind = options.kind ?? 'street';
   const tuning = options.tuning ?? PLAYER_TUNING;
   const layout =
-    kind === 'range'
+    options.layout ??
+    (kind === 'range'
       ? generateRangeLayout(seed)
       : kind === 'world'
         ? generateWorldLayout()
-        : generateStreetLayout(seed);
+        : generateStreetLayout(seed));
   buildStaticColliders(layout, physics);
-  const chunks = kind === 'world' ? new ChunkColliders(seed, physics) : null;
+  const ai = new AiRuntime();
+  // Fixed scenes rasterise their layout once; the world's nav grid follows collider streaming.
+  if (kind !== 'world') ai.nav.rasterize(layout);
+  const chunks =
+    kind === 'world'
+      ? new ChunkColliders(seed, physics, {
+          loaded: (c) => {
+            ai.nav.rasterize(c, [c.cx, c.cz]);
+          },
+          unloaded: (cx, cz) => {
+            ai.nav.removeTile(cx, cz);
+          },
+        })
+      : null;
   chunks?.loadAllAround(layout.spawn.position[0], layout.spawn.position[2]);
   const world = new World();
   world.register(PlayerIntent);
@@ -399,8 +468,11 @@ export function createSandbox(
   world.register(Rocket);
   world.register(Hazard);
   world.register(Target);
+  world.register(Mob);
+  world.register(PlayerVitals);
   if (kind === 'world') world.register(Environment);
   const player = world.spawn();
+  addVitals(world, player);
   world.store(SelectIntent).fields.slot[world.store(SelectIntent).add(player)] = -1;
   const irow = world.store(PlayerIntent).add(player);
   world.store(PlayerIntent).fields.yaw[irow] = layout.spawn.yaw;
@@ -432,6 +504,42 @@ export function createSandbox(
   fl.fields.battery[frow] = 1;
   giveLoadout(world, player, { infinite: kind === 'range', startSlot: kind === 'range' ? 2 : 0 });
   spawnTargets(world, layout.targets);
+  const probe: PlayerProbe = (w, out) => {
+    const pose = w.store(Pose);
+    const r = pose.rowOf(player);
+    if (r < 0) return false;
+    const pf = pose.fields;
+    out.x = at(pf.x, r);
+    out.y = at(pf.y, r);
+    out.z = at(pf.z, r);
+    out.eyeY = at(pf.y, r) + at(pf.eye, r);
+    const fl = w.store(Flashlight);
+    const fr = fl.rowOf(player);
+    out.flashlight = fr >= 0 && fl.fields.on[fr] === 1;
+    const v = w.store(PlayerVitals);
+    const vr = v.rowOf(player);
+    out.alive = vr < 0 || at(v.fields.down, vr) <= 0;
+    return true;
+  };
+  const respawn = (ctx: SimContext): void => {
+    const pose = ctx.world.store(Pose);
+    const r = pose.rowOf(player);
+    const [x, y, z] = layout.spawn.position;
+    physics.setCharacterFeet(characterId(character), [x, y + 0.05, z]);
+    if (r < 0) return;
+    const pf = pose.fields;
+    pf.x[r] = pf.prevX[r] = x;
+    pf.y[r] = pf.prevY[r] = y;
+    pf.z[r] = pf.prevZ[r] = z;
+  };
+  const aiSystems: System<SimContext>[] = [
+    perceptionSystem(ai, probe, physics),
+    decisionSystem(ai, probe),
+    movementSystem(ai, probe),
+    attackSystem(ai, probe, player),
+    vitalsSystem(player, probe, respawn),
+    spawnerSystem(ai, probe, { population: kind === 'world' ? WORLD_POPULATION : 0 }),
+  ];
   const worldSystems: System<SimContext>[] = [];
   if (chunks !== null) {
     worldSystems.push(
@@ -470,6 +578,7 @@ export function createSandbox(
     world,
     systems: [
       intentSystem(player),
+      teleportSystem(player, physics),
       motorSystem(player, physics, tuning),
       physicsStepSystem(physics),
       poseSystem(player, physics, tuning),
@@ -482,6 +591,7 @@ export function createSandbox(
       hazardSystem(),
       targetSystem(kind === 'range'),
       ...worldSystems,
+      ...aiSystems,
     ],
     hashExtras: [
       (h) => {
@@ -489,7 +599,7 @@ export function createSandbox(
       },
     ],
   });
-  return { simulation, player, layout, physics, tuning, kind, chunks };
+  return { simulation, player, layout, physics, tuning, kind, chunks, ai };
 }
 
 /** Everything the renderer needs for one frame, interpolated. Reused, never reallocated. */
@@ -513,6 +623,19 @@ export interface RenderView {
   stimulus: BodycamStimulus;
   weapon: WeaponView;
   env: EnvironmentView;
+  vitals: VitalsView;
+}
+
+/** The player's health and debug state, for the OSD, audio and the bodycam look. */
+export interface VitalsView {
+  health: number;
+  maxHealth: number;
+  hurt: number;
+  threat: number;
+  down: boolean;
+  god: boolean;
+  noclip: boolean;
+  deaths: number;
 }
 
 /** What the viewmodel/HUD-less presentation needs about the weapon in hand. */
@@ -611,6 +734,16 @@ export function createRenderView(): RenderView {
     stimulus: createStimulus(),
     weapon: createWeaponView(),
     env: createEnvironmentView(),
+    vitals: {
+      health: 100,
+      maxHealth: 100,
+      hurt: 0,
+      threat: 0,
+      down: false,
+      god: false,
+      noclip: false,
+      deaths: 0,
+    },
   };
 }
 
@@ -643,6 +776,23 @@ export function readRenderView(sandbox: Sandbox, alpha: number, out: RenderView)
   out.battery = frow >= 0 ? at(fl.fields.battery, frow) : 0;
   readWeaponView(sandbox, out.weapon);
   readEnvironment(simulation.world, out.env);
+  const vitals = simulation.world.store(PlayerVitals);
+  const vr = vitals.rowOf(player);
+  if (vr >= 0) {
+    const v = vitals.fields;
+    const o = out.vitals;
+    o.health = at(v.health, vr);
+    o.maxHealth = at(v.maxHealth, vr);
+    o.hurt = at(v.hurt, vr);
+    o.threat = at(v.threat, vr);
+    o.down = at(v.down, vr) > 0;
+    o.god = v.god[vr] === 1;
+    o.noclip = v.noclip[vr] === 1;
+    o.deaths = at(v.deaths, vr);
+    // Gameplay drives the footage: hits shake and tint it, nearby threats tunnel it.
+    out.stimulus.damage = Math.max(o.hurt, o.down ? 1 : 0);
+    out.stimulus.fear = o.threat * 0.85;
+  }
   out.tick = simulation.tick;
   out.simTime = Math.max(0, (simulation.tick - 1 + a) / simulation.tickRate);
   return out;

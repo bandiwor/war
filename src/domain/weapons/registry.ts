@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hotPatch, sameKeys } from '../core/hot-patch';
 
 /**
  * Ammunition, weapons and attachments as data. Numbers follow published
@@ -725,3 +726,31 @@ export const ATTACHMENTS = {
   laser: { label: 'Laser', spreadFactor: 0.8, soundFactor: 1, velocityFactor: 1 },
 } as const;
 export type AttachmentId = keyof typeof ATTACHMENTS;
+
+/**
+ * Dev hot reload (as in the mob registry): edits patch the live WEAPONS in
+ * place; new or removed ids need a reload. Inert in Node and production.
+ */
+/* v8 ignore start -- dev-server only: import.meta.hot is undefined under Node; verified by hand (ADR-0011) */
+if (import.meta.hot) {
+  // Vite finds self-accepting modules by the literal `import.meta.hot.accept(` call.
+  const data: unknown = import.meta.hot.data;
+  if (isRecord(data)) {
+    // The first instance's object is the one the game holds; later versions patch it.
+    data['live'] ??= WEAPONS;
+    import.meta.hot.accept((next) => {
+      const live = data['live'];
+      const fresh: unknown = next === undefined ? undefined : Reflect.get(next, 'WEAPONS');
+      if (!isRecord(live) || !isRecord(fresh) || !sameKeys(live, fresh)) {
+        import.meta.hot?.invalidate('weapon ids changed');
+        return;
+      }
+      hotPatch(live, fresh);
+    });
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+/* v8 ignore stop */

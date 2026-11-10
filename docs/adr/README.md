@@ -15,3 +15,4 @@ New ADRs get the next number; superseded ones stay, marked as superseded.
 | 0008 | [Weapons, ballistics and combat](0008-weapons-ballistics-combat.md)                          | Accepted |
 | 0009 | [Touch controls and GitHub Pages deployment](0009-touch-controls-and-pages.md)               | Accepted |
 | 0010 | [Open world: chunk streaming, time of day and weather](0010-world-streaming-time-weather.md) | Accepted |
+| 0011 | [AI core, navigation, spawning, bestiary and registry hot reload](0011-ai-core-bestiary.md)  | Accepted |

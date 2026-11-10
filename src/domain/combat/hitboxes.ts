@@ -215,23 +215,28 @@ export function intersectArchetype(
   dz: number,
   maxT: number,
   out: HitResult,
+  /** Size relative to the archetype (mobs of one race differ in size). */
+  scale = 1,
 ): HitResult {
   out.t = -1;
   out.part = null;
   // Broad phase.
   const bounds = archetypeBounds(race);
-  if (raySphere(ox, oy, oz, dx, dy, dz, x, y + bounds.y, z, bounds.r, maxT) < 0) return out;
+  if (raySphere(ox, oy, oz, dx, dy, dz, x, y + bounds.y * scale, z, bounds.r * scale, maxT) < 0)
+    return out;
   // Into local space (rotate by −yaw around Y; local −Z is the target's forward).
   const c = cos(-yaw);
   const s = sin(-yaw);
-  const px = ox - x;
-  const pz = oz - z;
+  // Scaling origin offset and direction alike keeps t in world units.
+  const inv = 1 / scale;
+  const px = (ox - x) * inv;
+  const pz = (oz - z) * inv;
   const lox = px * c + pz * s;
   const loz = -px * s + pz * c;
-  const loy = oy - y;
-  const ldx = dx * c + dz * s;
-  const ldz = -dx * s + dz * c;
-  const ldy = dy;
+  const loy = (oy - y) * inv;
+  const ldx = (dx * c + dz * s) * inv;
+  const ldz = (-dx * s + dz * c) * inv;
+  const ldy = dy * inv;
   for (const h of HITBOXES[race]) {
     let t: number;
     switch (h.kind) {

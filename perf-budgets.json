@@ -1,5 +1,5 @@
 {
-  "$comment": "CI performance gates. Thresholds are deliberately conservative for shared CI runners. The sandbox GC budget covers Rapier's JS wrapper, which allocates a WASM vector wrapper inside every computeColliderMovement call (~85 GC/M measured, ADR-0006/0008); our own systems allocate nothing per tick. worldStreaming allocates when it generates and loads a chunk (measured ~300 GC/M on a route that loads ~1700 chunks per 200k ticks); between loads it allocates nothing. Its slowest ticks (p99.9) must stay inside the 2 ms simulation frame budget.",
+  "$comment": "CI performance gates. Thresholds are deliberately conservative for shared CI runners. The sandbox GC budget covers Rapier's JS wrapper, which allocates a WASM vector wrapper inside every computeColliderMovement call (~85 GC/M measured, ADR-0006/0008); our own systems allocate nothing per tick. worldStreaming allocates when it generates and loads a chunk (measured ~300 GC/M on a route that loads ~1700 chunks per 200k ticks); between loads it allocates nothing. Its slowest ticks (p99.9) must stay inside the 2 ms simulation frame budget. aiCrowd: 64 mobs around the player (measured ~13k ticks/s, ~900 GC/M: Rapier's ray wrapper allocates per line-of-sight query, and dmath calls V8 does not inline box their results); its p99.9 tick must stay inside the 2 ms simulation budget.",
   "emptyWorld": {
     "minTicksPerSecond": 2000000,
     "maxMinorGcPerMillionTicks": 2
@@ -15,6 +15,11 @@
   "worldStreaming": {
     "minTicksPerSecond": 20000,
     "maxMinorGcPerMillionTicks": 800,
+    "maxP999TickMs": 2
+  },
+  "aiCrowd": {
+    "minTicksPerSecond": 6000,
+    "maxMinorGcPerMillionTicks": 1500,
     "maxP999TickMs": 2
   }
 }

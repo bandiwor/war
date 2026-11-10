@@ -28,6 +28,8 @@ import { MATERIALS, type MaterialId } from '../../domain/procgen/materials';
 import { MaterialLibrary } from './textures/material-library';
 import { Viewmodel } from './weapons/viewmodel';
 import { CombatFx } from './weapons/combat-fx';
+import { MobRenderer } from './mobs/mob-renderer';
+import { AiOverlay } from './mobs/ai-overlay';
 import type { GameEvents } from '../../domain/events/bus';
 import { WEAPONS } from '../../domain/weapons/registry';
 import type { TextureBaker } from './textures/texture-baker';
@@ -83,6 +85,8 @@ export class BodycamPresenter implements Presenter {
   private colliderLines: THREE.LineSegments | null = null;
   readonly viewmodel = new Viewmodel();
   readonly combatFx: CombatFx;
+  readonly mobs: MobRenderer;
+  readonly aiOverlay: AiOverlay;
   private readonly baseFov = 78;
   private zoom = 1;
 
@@ -100,6 +104,9 @@ export class BodycamPresenter implements Presenter {
     sceneRig.scene.add(this.flashlight.light, this.flashlight.light.target);
     this.combatFx = new CombatFx(options.sandbox);
     sceneRig.scene.add(this.combatFx.group);
+    this.mobs = new MobRenderer(options.sandbox);
+    this.aiOverlay = new AiOverlay(options.sandbox);
+    sceneRig.scene.add(this.mobs.group, this.aiOverlay.group);
     const depth = new THREE.DepthTexture(1, 1);
     depth.type = THREE.UnsignedIntType;
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -197,7 +204,13 @@ export class BodycamPresenter implements Presenter {
           )
         : null;
     if (extra !== null) this.sceneRig.scene.add(extra);
+    // Every mob kind's materials, so the first spawn of a kind never compiles a shader.
+    const mobWarmup = this.mobs.warmupModels();
+    mobWarmup.position.set(0, -1000, 0);
+    this.sceneRig.scene.add(mobWarmup);
     await this.renderer.compileAsync(this.sceneRig.scene, this.camera);
+    this.sceneRig.scene.remove(mobWarmup);
+    this.mobs.releaseWarmup(mobWarmup);
     if (extra !== null) this.sceneRig.scene.remove(extra);
     await this.renderer.compileAsync(this.viewmodel.scene, this.camera);
     this.combatFx.setWarmup(false);
@@ -355,6 +368,8 @@ export class BodycamPresenter implements Presenter {
     }
     this.viewmodel.update(this.camera, view, frozen !== undefined ? 1 / 60 : dt, view.flashlightOn);
     this.combatFx.update(frozen !== undefined ? 0 : dt);
+    this.mobs.update(alpha, frozen !== undefined ? 0 : Math.min(dt, 0.1), time);
+    this.aiOverlay.update(view.x, view.z);
 
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.setViewport(0, 0, this.internalWidth, this.internalHeight);
@@ -409,6 +424,8 @@ export class BodycamPresenter implements Presenter {
     this.pipeline.dispose();
     this.viewmodel.dispose();
     this.combatFx.dispose();
+    this.mobs.dispose();
+    this.aiOverlay.dispose();
     this.flashlight.dispose();
     this.sceneTarget.dispose();
     this.sceneRig.dispose();

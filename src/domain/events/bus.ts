@@ -123,6 +123,17 @@ export interface WeaponFxEvent {
   flags: number;
 }
 
+/** A mob attacked the player (damage 0 when it did not land, e.g. god mode). */
+export interface MobAttackEvent {
+  x: number;
+  y: number;
+  z: number;
+  /** Index into MOB_IDS. */
+  kind: number;
+  race: number;
+  damage: number;
+}
+
 export class GameEvents {
   readonly footstep = new EventChannel<FootstepEvent>(() => ({
     x: 0,
@@ -184,6 +195,14 @@ export class GameEvents {
     kind: 0,
   }));
   readonly weaponFx = new EventChannel<WeaponFxEvent>(() => ({ weapon: 0, flags: 0 }));
+  readonly mobAttack = new EventChannel<MobAttackEvent>(() => ({
+    x: 0,
+    y: 0,
+    z: 0,
+    kind: 0,
+    race: 0,
+    damage: 0,
+  }));
 
   clear(): void {
     this.footstep.clear();
@@ -194,5 +213,6 @@ export class GameEvents {
     this.impact.clear();
     this.explosion.clear();
     this.weaponFx.clear();
+    this.mobAttack.clear();
   }
 }

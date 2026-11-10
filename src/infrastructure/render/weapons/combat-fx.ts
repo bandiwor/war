@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { Mob } from '../../../application/ai/components';
+import type { EntityId } from '../../../domain/ecs/entity';
 import { Hazard, Projectile, Target, Rocket, Thrown } from '../../../application/combat/components';
 import type { Sandbox } from '../../../application/scenes/sandbox';
 import { HITBOXES } from '../../../domain/combat/hitboxes';
@@ -604,7 +606,10 @@ export class CombatFx {
       plant: { color: 0x274a32, emissive: 0x0b3a2c, metal: 0 },
       animal: { color: 0x3a2a1e, emissive: 0x000000, metal: 0 },
     };
+    const mobs = this.sandbox.simulation.world.tryStore(Mob);
     for (let row = 0; row < store.size; row++) {
+      // Mobs are drawn by the MobRenderer; these are the fixed range dummies.
+      if (mobs !== null && mobs.rowOf(entityId(store.dense[row] ?? 0)) >= 0) continue;
       const race = raceAt(at(store.fields.race, row));
       const look = looks[race];
       const mat = new THREE.MeshStandardMaterial({
@@ -782,3 +787,8 @@ function bulletHoleTexture(size = 64): THREE.DataTexture {
 }
 
 export const RACE_LIST = RACES;
+
+function entityId(raw: number): EntityId {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- brand restore: dense rows hold live entity ids
+  return raw as EntityId;
+}

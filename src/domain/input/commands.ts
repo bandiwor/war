@@ -45,6 +45,16 @@ export const InputCommandSchema = z.discriminatedUnion('type', [
     key: z.enum(ENV_KEYS),
     value: z.number().min(-1).max(86400),
   }),
+  /** Spawn a mob (registry id) at a point (debug menu, bestiary, tests). */
+  z.object({
+    type: z.literal('spawn'),
+    mob: z.string().max(64),
+    x: z.number().min(-10000).max(10000),
+    z: z.number().min(-10000).max(10000),
+    yaw: z.number().min(-10).max(10),
+  }),
+  /** Debug cheats: invulnerability, flying through walls, full heal. */
+  z.object({ type: z.literal('cheat'), key: z.enum(['god', 'noclip', 'heal']), on: z.boolean() }),
   /** Move the player's feet to a point (debug teleport). */
   z.object({
     type: z.literal('teleport'),

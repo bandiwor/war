@@ -152,10 +152,11 @@ export function visibilityMeters(w: Weather, light: number): number {
 export function perceptionScale(
   w: Weather,
   light: number,
-): { readonly sight: number; readonly hearing: number } {
-  const sight = clamp(visibilityMeters(w, light) / 90, 0, 1) * (0.2 + 0.8 * light);
-  const hearing = clamp(1 - 0.45 * clamp(w.rain, 0, 1) - 0.25 * clamp(w.wind, 0, 1), 0.2, 1);
-  return { sight, hearing };
+  out: { sight: number; hearing: number } = { sight: 0, hearing: 0 },
+): { sight: number; hearing: number } {
+  out.sight = clamp(visibilityMeters(w, light) / 90, 0, 1) * (0.2 + 0.8 * light);
+  out.hearing = clamp(1 - 0.45 * clamp(w.rain, 0, 1) - 0.25 * clamp(w.wind, 0, 1), 0.2, 1);
+  return out;
 }
 
 /** Horizontal wind velocity (m/s) for particles and later ballistics. */

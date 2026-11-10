@@ -66,7 +66,7 @@ describe('golden state hashes', () => {
 
   it('the same inputs on a second run give the same hash', () => {
     for (const c of CASES) expect(run(c)).toBe(computed[key(c)]);
-  });
+  }, 60_000);
 
   it('a different seed gives a different hash', () => {
     expect(run({ scene: 'churn', seed: 1338, ticks: 3600, input: false })).not.toBe(

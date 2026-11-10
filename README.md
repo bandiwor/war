@@ -11,7 +11,14 @@ tablets get on-screen controls, best in landscape).
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 5, the open world.** A 512 m world of five hub zones (abandoned city, industrial
+> Status: **stage 6, AI and bestiary.** Eight placeholder mobs (two per race), all registry data.
+> A utility AI senses you (camera cones that need light, hearing, short-range scent), remembers
+> where you were, searches, chases, attacks and flees. Mobs path around obstacles on a
+> deterministic nav grid within fixed per-tick budgets, and the open world populates itself zone
+> by zone. The debug bestiary lists every mob, weapon, effect and material automatically, with a
+> test stage (orbit, animations, slow motion, bones, hitboxes, vision cone). Registry edits
+> hot-reload into the running game.
+> Previously: **stage 5, the open world.** A 512 m world of five hub zones (abandoned city, industrial
 > yards, subway station, forest, research complex) joined by roads, generated chunk by chunk from
 > the seed and streamed around you. Colliders stream deterministically in the simulation, and
 > meshes are built in Web Workers within a per-frame budget. A dusk-to-night clock and drifting
@@ -39,19 +46,19 @@ npm run dev
 
 Open the printed URL and click to capture the mouse.
 
-| Input        | Action                                                                       |
-| ------------ | ---------------------------------------------------------------------------- |
-| Mouse        | Look                                                                         |
-| W A S D      | Walk                                                                         |
-| Shift        | Sprint (drains stamina)                                                      |
-| Space        | Jump                                                                         |
-| Left mouse   | Fire / swing / throw                                                         |
-| Right mouse  | Aim down sights (rifle: 6× optic)                                            |
-| R            | Reload (also clears a jam)                                                   |
-| 1–9, 0, -    | Select weapon slot (`-` is the RPG-7); mouse wheel / B for next / fire mode  |
-| Left Ctrl    | Crouch (hold; you stay down under low ceilings)                              |
-| F            | Flashlight on/off (drains the battery shown in the OSD)                      |
-| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam · Range · World · Audio |
+| Input        | Action                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------- |
+| Mouse        | Look                                                                                    |
+| W A S D      | Walk                                                                                    |
+| Shift        | Sprint (drains stamina)                                                                 |
+| Space        | Jump                                                                                    |
+| Left mouse   | Fire / swing / throw                                                                    |
+| Right mouse  | Aim down sights (rifle: 6× optic)                                                       |
+| R            | Reload (also clears a jam)                                                              |
+| 1–9, 0, -    | Select weapon slot (`-` is the RPG-7); mouse wheel / B for next / fire mode             |
+| Left Ctrl    | Crouch (hold; you stay down under low ceilings)                                         |
+| F            | Flashlight on/off (drains the battery shown in the OSD)                                 |
+| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam · Range · World · Bestiary · Audio |
 
 On a phone or tablet the game shows touch controls. It also starts at `?quality=low`.
 
@@ -70,6 +77,11 @@ The game opens in the streamed open world. `?scene=street` loads the fixed stage
 `?scene=range` the shooting range. In dev builds, the debug menu's **World** tab sets the clock
 and its speed, overrides fog, rain and wind, teleports you to any hub, and draws the chunk
 overlay: green chunks are solid in the simulation, amber ones are only drawn.
+
+Mobs hurt you. Hits and nearby threats show in the footage (red tint, shake, tunnel vision)
+and in the soundscape. At zero health you go down and respawn at the start. The **Bestiary**
+tab has god mode, noclip and heal; overlays for mob senses, paths and the nav grid; and the
+nearest mob's live utility scores. See [adding a mob](docs/guides/adding-a-mob.md).
 
 Useful URL options (see `src/presentation/url-options.ts`): `?seed=N`, `?quality=low|medium|high`,
 `?fx=none|all|bloom,vignette`, and `?stim=damage:0.5,fear:0.3,emi:0.8` to preview the look reacting to
@@ -116,7 +128,7 @@ Guides: [add a system](docs/guides/adding-a-system.md) ·
 3. ✅ Procedural audio engine
 4. ✅ Weapons
 5. ✅ World streaming, time of day, weather
-6. AI core, bestiary, HMR
+6. ✅ AI core, bestiary, HMR
 7. Races: zombies → animals → plants → robots
 8. Story, quests, saves
 9. Level editor

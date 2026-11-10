@@ -11,6 +11,9 @@ import { createSandbox } from '../src/application/scenes/sandbox';
 import { createRapierPhysics } from '../src/infrastructure/physics/rapier-physics';
 import type { Simulation } from '../src/application/simulation';
 import type { InputCommand } from '../src/domain/input/commands';
+import { MOB_IDS } from '../src/domain/mobs/registry';
+import { spawnMob } from '../src/application/ai/systems';
+import { Mob } from '../src/application/ai/components';
 import { seed } from '../src/domain/core/brand';
 import { createChurnWorld } from '../tests/fixtures/churn-world';
 
@@ -21,6 +24,7 @@ const budgets = z
     churnWorld: Budget,
     sandbox: Budget,
     worldStreaming: Budget.extend({ maxP999TickMs: z.number() }),
+    aiCrowd: Budget.extend({ maxP999TickMs: z.number() }),
   })
   .parse(JSON.parse(readFileSync(new URL('../perf-budgets.json', import.meta.url), 'utf8')));
 
@@ -45,6 +49,49 @@ async function walkingSandbox(): Promise<Simulation> {
 }
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50));
+
+/**
+ * AI under load: 64 mobs of every kind around the player on the street, all
+ * perceiving, deciding, pathing and attacking (the player is invulnerable and
+ * keeps circling so they keep chasing). Throughput, GC and slowest ticks.
+ */
+async function measureCrowd(ticks: number): Promise<{ tps: number; gcPerM: number; p999: number }> {
+  const sb = createSandbox(seed(2), await createRapierPhysics(60));
+  const sim = sb.simulation;
+  for (let i = 0; i < 64; i++) {
+    const id = MOB_IDS[i % MOB_IDS.length] ?? 'shambler';
+    const a = (i / 64) * Math.PI * 2;
+    const r = 8 + (i % 5) * 4;
+    const x = Math.sin(a) * Math.min(r, 7);
+    const z = -40 + Math.cos(a) * r;
+    if (sb.ai.nav.walkableAt(x, z)) spawnMob(sim.world, sb.ai, id, x, z, a);
+  }
+  const start: InputCommand[] = [
+    { type: 'cheat', key: 'god', on: true },
+    { type: 'move', forward: 1, strafe: 0 },
+  ];
+  const turn: InputCommand[] = [{ type: 'look', yaw: 0.02, pitch: 0 }];
+  for (let t = 0; t < 5_000; t++) sim.step(t === 0 ? start : turn); // warm-up
+  await flush();
+  minorGcs = 0;
+  const times = new Float64Array(ticks);
+  const t0 = performance.now();
+  for (let i = 0; i < ticks; i++) {
+    const a = performance.now();
+    sim.step(turn);
+    times[i] = performance.now() - a;
+  }
+  const elapsed = performance.now() - t0;
+  await flush();
+  const sorted = Array.from(times).sort((x, y) => x - y);
+  const p999 = sorted[Math.floor(sorted.length * 0.999)] ?? 0;
+  const tps = Math.round((ticks / elapsed) * 1000);
+  const gcPerM = (minorGcs / ticks) * 1_000_000;
+  console.log(
+    `aiCrowd: ${tps.toLocaleString('en')} ticks/s with ${String(sim.world.store(Mob).size)} mobs, ${String(minorGcs)} minor GCs, tick p99.9 ${p999.toFixed(3)} ms, ${String(sb.ai.stats.searches)} path searches, ${String(sb.ai.stats.attacks)} attacks`,
+  );
+  return { tps, gcPerM, p999 };
+}
 
 /**
  * Open world: sprint along the main avenue and turn back every 40 s, so
@@ -115,6 +162,7 @@ const results = {
   sandbox: await measure('sandbox', await walkingSandbox(), 300_000),
 };
 const world = await measureWorld(200_000);
+const crowd = await measureCrowd(100_000);
 observer.disconnect();
 
 let failed = false;
@@ -154,6 +202,23 @@ if (world.gcPerM > wb.maxMinorGcPerMillionTicks) {
 if (world.p999 > wb.maxP999TickMs) {
   console.error(
     `FAIL worldStreaming: tick p99.9 ${world.p999.toFixed(3)} ms > ${String(wb.maxP999TickMs)} ms`,
+  );
+  failed = true;
+}
+const cb = budgets.aiCrowd;
+if (crowd.tps < cb.minTicksPerSecond) {
+  console.error(`FAIL aiCrowd: ${String(crowd.tps)} ticks/s < ${String(cb.minTicksPerSecond)}`);
+  failed = true;
+}
+if (crowd.gcPerM > cb.maxMinorGcPerMillionTicks) {
+  console.error(
+    `FAIL aiCrowd: ${crowd.gcPerM.toFixed(1)} minor GCs per 1M ticks > ${String(cb.maxMinorGcPerMillionTicks)}`,
+  );
+  failed = true;
+}
+if (crowd.p999 > cb.maxP999TickMs) {
+  console.error(
+    `FAIL aiCrowd: tick p99.9 ${crowd.p999.toFixed(3)} ms > ${String(cb.maxP999TickMs)} ms`,
   );
   failed = true;
 }

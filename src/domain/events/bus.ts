@@ -134,6 +134,24 @@ export interface MobAttackEvent {
   damage: number;
 }
 
+/** A mob's ranged attack: a laser shot, an acid spit, a leap (render and audio). */
+export interface MobRangedEvent {
+  /** 0 = laser, 1 = spit, 2 = leap, 3 = latched on, 4 = thrown off. */
+  kind: number;
+  /** Index into MOB_IDS. */
+  mob: number;
+  x: number;
+  y: number;
+  z: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  /** It hit the player. */
+  hit: boolean;
+}
+
+export const RANGED_KINDS = ['laser', 'spit', 'leap', 'latch', 'thrown'] as const;
+
 export class GameEvents {
   readonly footstep = new EventChannel<FootstepEvent>(() => ({
     x: 0,
@@ -195,6 +213,17 @@ export class GameEvents {
     kind: 0,
   }));
   readonly weaponFx = new EventChannel<WeaponFxEvent>(() => ({ weapon: 0, flags: 0 }));
+  readonly mobRanged = new EventChannel<MobRangedEvent>(() => ({
+    kind: 0,
+    mob: 0,
+    x: 0,
+    y: 0,
+    z: 0,
+    tx: 0,
+    ty: 0,
+    tz: 0,
+    hit: false,
+  }));
   readonly mobAttack = new EventChannel<MobAttackEvent>(() => ({
     x: 0,
     y: 0,
@@ -214,5 +243,6 @@ export class GameEvents {
     this.explosion.clear();
     this.weaponFx.clear();
     this.mobAttack.clear();
+    this.mobRanged.clear();
   }
 }

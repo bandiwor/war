@@ -71,6 +71,8 @@ export const Mob = defineComponent('Mob', {
   leap: 'f32',
   leapX: 'f64',
   leapZ: 'f64',
+  leapFromX: 'f64',
+  leapFromZ: 'f64',
   /** Creepers: clinging to the player. */
   attached: 'u8',
   /** Seconds stunned (thrown off, blinded hard). */
@@ -108,3 +110,17 @@ export const PlayerVitals = defineComponent('PlayerVitals', {
 
 export const PLAYER_MAX_HEALTH = 100;
 export const RESPAWN_SECONDS = 3;
+
+/** A pool of plant acid on the ground: burns the player while they stand in it. */
+export const Acid = defineComponent('Acid', {
+  x: 'f64',
+  y: 'f64',
+  z: 'f64',
+  radius: 'f32',
+  remaining: 'f32',
+  dps: 'f32',
+  /** Seconds until it lands (the glob is still in the air). */
+  flight: 'f32',
+});
+
+export const ACID = { radius: 1.4, seconds: 5, flight: 0.55 } as const;

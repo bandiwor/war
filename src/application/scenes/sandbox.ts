@@ -26,10 +26,11 @@ import { PlayerIntent, SelectIntent, TICK_RATE, intentSystem } from './empty-wor
 import { generateRangeLayout } from '../../domain/world/range-layout';
 import { generateWorldLayout } from '../../domain/world/world-layout';
 import { ChunkColliders } from '../world/chunk-colliders';
-import { Mob, PlayerVitals } from '../ai/components';
+import { Acid, Mob, PlayerVitals } from '../ai/components';
 import { AiRuntime } from '../ai/runtime';
 import { senseWorldSystem } from '../ai/world-senses';
 import { drivesSystem } from '../ai/drives-system';
+import { acidSystem, clingSystem, rangedSystem } from '../ai/ranged-system';
 import {
   addVitals,
   attackSystem,
@@ -477,6 +478,7 @@ export function createSandbox(
   world.register(Target);
   world.register(Mob);
   world.register(PlayerVitals);
+  world.register(Acid);
   if (kind === 'world') world.register(Environment);
   const player = world.spawn();
   addVitals(world, player);
@@ -548,6 +550,9 @@ export function createSandbox(
     drivesSystem(ai, probe),
     decisionSystem(ai, probe),
     movementSystem(ai, probe),
+    rangedSystem(ai, probe, player, physics),
+    clingSystem(ai, probe, player),
+    acidSystem(probe, player),
     attackSystem(ai, probe, player),
     vitalsSystem(player, probe, respawn),
     spawnerSystem(ai, probe, { population: kind === 'world' ? WORLD_POPULATION : 0 }),

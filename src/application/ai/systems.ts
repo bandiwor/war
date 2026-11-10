@@ -639,6 +639,8 @@ function moveMob(
   f.speed[row] = 0;
   const action = f.action[row] ?? 0;
   if (action === DEAD_ACTION) return;
+  // Leaping and clinging bodies are moved by the ranged/cling systems; stunned ones lie still.
+  if ((f.leap[row] ?? -1) >= 0 || f.attached[row] === 1 || (f.stun[row] ?? 0) > 0) return;
   const ddx = p.x - mx;
   const ddz = p.z - mz;
   if (ddx * ddx + ddz * ddz > AI_BUDGET.farLod * AI_BUDGET.farLod) return;
@@ -875,6 +877,7 @@ export function attackSystem(
       const f = mob.fields;
       for (let row = 0; row < mob.size; row++) {
         if ((f.action[row] ?? 0) !== ATTACK || (f.attackCooldown[row] ?? 0) > 0) continue;
+        if (f.attached[row] === 1 || (f.stun[row] ?? 0) > 0 || (f.leap[row] ?? -1) >= 0) continue;
         const tr = t.rowOf(entity(mob.dense[row] ?? 0));
         if (tr < 0 || (t.fields.health[tr] ?? 0) <= 0) continue;
         const spec = specOf(mob, row);

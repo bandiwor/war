@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { Mob, PlayerVitals, DEAD_ACTION } from '../../src/application/ai/components';
 import { spawnMob } from '../../src/application/ai/systems';
 import { Target } from '../../src/application/combat/components';
@@ -122,6 +122,12 @@ describe('sight (robots: cameras that need light)', () => {
   });
 
   it('loses the player behind a corner, goes to the last known position, searches ~10 s, then gives up', () => {
+    // A lone robot: no reinforcements (they would keep it informed over the network).
+    const savedTactics = { ...MOBS.sentry.tactics };
+    hotPatch(MOBS.sentry.tactics, { ...savedTactics, reinforce: 0 });
+    onTestFinished(() => {
+      hotPatch(MOBS.sentry.tactics, savedTactics);
+    });
     const sb = arena();
     run(sb, 2, [at(-6, 12)]);
     const m = place(sb, 'sentry', -6, -8, -6, 12);

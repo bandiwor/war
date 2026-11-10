@@ -136,7 +136,7 @@ export interface MobAttackEvent {
 
 /** A mob's ranged attack: a laser shot, an acid spit, a leap (render and audio). */
 export interface MobRangedEvent {
-  /** 0 = laser, 1 = spit, 2 = leap, 3 = latched on, 4 = thrown off. */
+  /** 0 = laser, 1 = spit, 2 = leap, 3 = latched on, 4 = thrown off, 5 = called reinforcements. */
   kind: number;
   /** Index into MOB_IDS. */
   mob: number;
@@ -150,7 +150,7 @@ export interface MobRangedEvent {
   hit: boolean;
 }
 
-export const RANGED_KINDS = ['laser', 'spit', 'leap', 'latch', 'thrown'] as const;
+export const RANGED_KINDS = ['laser', 'spit', 'leap', 'latch', 'thrown', 'call'] as const;
 
 export class GameEvents {
   readonly footstep = new EventChannel<FootstepEvent>(() => ({

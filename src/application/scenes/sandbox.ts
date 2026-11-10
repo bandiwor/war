@@ -30,6 +30,7 @@ import { Acid, Mob, PlayerVitals } from '../ai/components';
 import { AiRuntime } from '../ai/runtime';
 import { senseWorldSystem } from '../ai/world-senses';
 import { drivesSystem } from '../ai/drives-system';
+import { networkSystem, tacticsSystem } from '../ai/tactics-system';
 import { acidSystem, clingSystem, rangedSystem } from '../ai/ranged-system';
 import {
   addVitals,
@@ -548,7 +549,9 @@ export function createSandbox(
     senseWorldSystem(ai, probe, player),
     perceptionSystem(ai, probe, physics),
     drivesSystem(ai, probe),
+    networkSystem(ai, probe),
     decisionSystem(ai, probe),
+    tacticsSystem(ai, probe, player, physics),
     movementSystem(ai, probe),
     rangedSystem(ai, probe, player, physics),
     clingSystem(ai, probe, player),
@@ -656,6 +659,10 @@ export interface VitalsView {
   god: boolean;
   noclip: boolean;
   deaths: number;
+  /** Robots' radio interference 0..1. */
+  emi: number;
+  /** Plants clinging to the player. */
+  clinging: number;
 }
 
 /** What the viewmodel/HUD-less presentation needs about the weapon in hand. */
@@ -763,6 +770,8 @@ export function createRenderView(): RenderView {
       god: false,
       noclip: false,
       deaths: 0,
+      emi: 0,
+      clinging: 0,
     },
   };
 }
@@ -809,9 +818,13 @@ export function readRenderView(sandbox: Sandbox, alpha: number, out: RenderView)
     o.god = v.god[vr] === 1;
     o.noclip = v.noclip[vr] === 1;
     o.deaths = at(v.deaths, vr);
+    o.emi = at(v.emi, vr);
+    o.clinging = at(v.clinging, vr);
     // Gameplay drives the footage: hits shake and tint it, nearby threats tunnel it.
     out.stimulus.damage = Math.max(o.hurt, o.down ? 1 : 0);
-    out.stimulus.fear = o.threat * 0.85;
+    out.stimulus.fear = Math.max(o.threat * 0.85, o.clinging > 0 ? 0.9 : 0);
+    // Robots' radio noise breaks up the picture.
+    out.stimulus.emi = o.emi;
   }
   out.tick = simulation.tick;
   out.simTime = Math.max(0, (simulation.tick - 1 + a) / simulation.tickRate);

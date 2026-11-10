@@ -96,7 +96,11 @@ export function scoreActions(i: UtilityInputs, out: Float64Array): Float64Array 
   const hurt = i.fleeBelow > 0 ? 1 - ramp(i.health, i.fleeBelow * 0.6, i.fleeBelow) : 0;
   out[0] = 0.25; // idle: the floor everything else must beat
   out[1] = move * calm * (i.roam > 0 ? 0.35 : 0); // wander
-  out[2] = move * (i.hasLastKnown && !i.sensing && i.searchLeft <= 0 ? 0.3 + 0.6 * threat : 0); // investigate
+  // investigate (a badly hurt mob does not go looking for whoever hurt it: it stays in cover)
+  out[2] =
+    move *
+    (i.hasLastKnown && !i.sensing && i.searchLeft <= 0 ? 0.3 + 0.6 * threat : 0) *
+    (1 - 0.9 * hurt);
   // chase: how aggressive it is decides whether it goes after what it senses
   out[3] = move * (i.sensing ? i.aggression : 0) * (1 - inReach * 0.8);
   // attack: only what it senses right now (a remembered position is not something to bite)

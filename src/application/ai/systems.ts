@@ -323,7 +323,7 @@ function perceiveMob(
       }
     }
     const eyes = spec.senses.sight;
-    if (eyes !== null) {
+    if (eyes !== null && (f.blind[row] ?? 0) <= 0) {
       const s = sightStrength(
         eyes,
         mx,
@@ -652,7 +652,16 @@ function moveMob(
   let gx = 0;
   let gz = 0;
   let face = false;
-  if (action === CHASE) {
+  if (action === CHASE && f.hasGoal[row] === 2) {
+    // A robot's flanking position: go there, and once there face the target (its laser).
+    gx = f.goalX[row] ?? p.x;
+    gz = f.goalZ[row] ?? p.z;
+    speed = spec.body.runSpeed;
+    if ((gx - mx) * (gx - mx) + (gz - mz) * (gz - mz) < 1) {
+      speed = 0;
+      face = true;
+    }
+  } else if (action === CHASE) {
     // Zombies follow the scent trail, not the player they cannot see.
     const close = ddx * ddx + ddz * ddz < 4;
     gx = spec.senses.pheromone !== null && !close ? (f.lastX[row] ?? p.x) : p.x;

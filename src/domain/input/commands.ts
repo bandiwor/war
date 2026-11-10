@@ -21,6 +21,10 @@ export const ACTIONS = [
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
+/** Environment settings a command can change; see domain/world/environment.ts. */
+export const ENV_KEYS = ['timeOfDay', 'timeScale', 'fog', 'rain', 'wind'] as const;
+export type EnvKey = (typeof ENV_KEYS)[number];
+
 export const InputCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('move'),
@@ -31,6 +35,23 @@ export const InputCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('action'), action: z.enum(ACTIONS), pressed: z.boolean() }),
   /** Select a loadout slot directly (number keys). */
   z.object({ type: z.literal('select'), slot: z.number().int().min(0).max(15) }),
+  /**
+   * World controls (debug menu, scripted scenes). They are commands, not side
+   * channels, so a replay reproduces a session in which the clock or the
+   * weather was changed. Weather values of −1 return control to the simulation.
+   */
+  z.object({
+    type: z.literal('env'),
+    key: z.enum(ENV_KEYS),
+    value: z.number().min(-1).max(86400),
+  }),
+  /** Move the player's feet to a point (debug teleport). */
+  z.object({
+    type: z.literal('teleport'),
+    x: z.number().min(-10000).max(10000),
+    y: z.number().min(-1000).max(1000),
+    z: z.number().min(-10000).max(10000),
+  }),
 ]);
 
 export type InputCommand = z.infer<typeof InputCommandSchema>;

@@ -75,6 +75,18 @@ describe('ambient mix', () => {
     expect(wet.insects.gain).toBeLessThan(mix({ zones: { forest: 1 } }).insects.gain);
   });
 
+  it('weather wind scales and roughens the wind layer (no change at the authored strength)', () => {
+    const typical = mix({ zones: { forest: 1 }, night: 0 });
+    expect(typical.wind.gain).toBeCloseTo(ZONE_SOUNDSCAPES.forest.wind.level);
+    expect(typical.wind.gustiness).toBeCloseTo(ZONE_SOUNDSCAPES.forest.wind.gustiness);
+    const still = mix({ zones: { forest: 1 }, night: 0, wind: 0 });
+    const gale = mix({ zones: { forest: 1 }, night: 0, wind: 1 });
+    expect(still.wind.gain).toBeLessThan(typical.wind.gain * 0.5);
+    expect(gale.wind.gain).toBeGreaterThan(typical.wind.gain);
+    expect(gale.wind.gain).toBeLessThanOrEqual(1);
+    expect(gale.wind.gustiness).toBeGreaterThan(typical.wind.gustiness);
+  });
+
   it('out-of-range inputs are clamped', () => {
     expect(mix({ danger: 9, health: -3, night: 7 })).toEqual(
       mix({ danger: 1, health: 0, night: 1 }),

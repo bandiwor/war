@@ -14,7 +14,7 @@ const { values } = parseArgs({
 
 const ticks = Number(values.ticks);
 const started = performance.now();
-const scene = values.scene === 'empty' ? 'empty' : 'sandbox';
+const scene = values.scene === 'empty' || values.scene === 'world' ? values.scene : 'sandbox';
 const result = await runHeadless(seed(Number(values.seed) >>> 0), ticks, values.input, scene);
 const elapsed = performance.now() - started;
 const simulatedSeconds = ticks / 60;

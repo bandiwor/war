@@ -61,6 +61,10 @@ export function intentSystem(player: EntityId): System<SimContext> {
           case 'select':
             if (select !== null && srow >= 0) select.fields.slot[srow] = cmd.slot;
             break;
+          case 'env':
+          case 'teleport':
+            break; // world commands: handled by the world systems of scenes that have them
+
           default:
             assertNever(cmd, 'input command');
         }

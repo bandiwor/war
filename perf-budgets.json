@@ -1,6 +1,20 @@
 {
-  "$comment": "CI performance gates. Thresholds are deliberately conservative for shared CI runners. The sandbox GC budget covers Rapier's JS wrapper, which allocates a WASM vector wrapper inside every computeColliderMovement call (~85 GC/M measured, ADR-0006/0008); our own systems allocate nothing per tick.",
-  "emptyWorld": { "minTicksPerSecond": 2000000, "maxMinorGcPerMillionTicks": 2 },
-  "churnWorld": { "minTicksPerSecond": 20000, "maxMinorGcPerMillionTicks": 40 },
-  "sandbox": { "minTicksPerSecond": 30000, "maxMinorGcPerMillionTicks": 150 }
+  "$comment": "CI performance gates. Thresholds are deliberately conservative for shared CI runners. The sandbox GC budget covers Rapier's JS wrapper, which allocates a WASM vector wrapper inside every computeColliderMovement call (~85 GC/M measured, ADR-0006/0008); our own systems allocate nothing per tick. worldStreaming allocates when it generates and loads a chunk (measured ~300 GC/M on a route that loads ~1700 chunks per 200k ticks); between loads it allocates nothing. Its slowest ticks (p99.9) must stay inside the 2 ms simulation frame budget.",
+  "emptyWorld": {
+    "minTicksPerSecond": 2000000,
+    "maxMinorGcPerMillionTicks": 2
+  },
+  "churnWorld": {
+    "minTicksPerSecond": 20000,
+    "maxMinorGcPerMillionTicks": 40
+  },
+  "sandbox": {
+    "minTicksPerSecond": 30000,
+    "maxMinorGcPerMillionTicks": 150
+  },
+  "worldStreaming": {
+    "minTicksPerSecond": 20000,
+    "maxMinorGcPerMillionTicks": 800,
+    "maxP999TickMs": 2
+  }
 }

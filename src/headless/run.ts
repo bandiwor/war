@@ -6,7 +6,7 @@ import type { Seed } from '../domain/core/brand';
 import { Rng } from '../domain/math/prng';
 import { createRapierPhysics } from '../infrastructure/physics/rapier-physics';
 
-export type HeadlessScene = 'empty' | 'sandbox';
+export type HeadlessScene = 'empty' | 'sandbox' | 'world';
 
 export interface HeadlessResult {
   readonly ticks: number;
@@ -23,6 +23,8 @@ export async function createHeadlessScene(
       return createEmptyWorld(runSeed).simulation;
     case 'sandbox':
       return createSandbox(runSeed, await createRapierPhysics(60)).simulation;
+    case 'world':
+      return createSandbox(runSeed, await createRapierPhysics(60), { kind: 'world' }).simulation;
   }
 }
 

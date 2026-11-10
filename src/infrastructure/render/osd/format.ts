@@ -3,7 +3,12 @@ export const IN_WORLD_DATE = '2031-10-14';
 export const START_SECONDS = 21 * 3600 + 40 * 60;
 
 export function formatClock(simTime: number): string {
-  const total = START_SECONDS + Math.floor(simTime);
+  return formatTimeOfDay(START_SECONDS + simTime);
+}
+
+/** hh:mm:ss of a time of day in seconds (wraps at midnight). */
+export function formatTimeOfDay(seconds: number): string {
+  const total = Math.floor(seconds);
   const hh = String(Math.floor(total / 3600) % 24).padStart(2, '0');
   const mm = String(Math.floor(total / 60) % 60).padStart(2, '0');
   const ss = String(total % 60).padStart(2, '0');

@@ -40,7 +40,9 @@ describe('url options', () => {
     expect(o.benchSeconds).toBe(15);
     expect(o.replay).toBeNull();
     expect(parseUrlOptions('?replay=session').replay).toBe('session');
-    expect(parseUrlOptions('').scene).toBe('street');
+    expect(parseUrlOptions('').scene).toBe('world');
+    expect(parseUrlOptions('?scene=street').scene).toBe('street');
+    expect(parseUrlOptions('?scene=bogus').scene).toBe('world');
     expect(parseUrlOptions('?scene=range').scene).toBe('range');
     expect(o.signal).toBe(0.7);
     expect(o.stimulus).toEqual({ damage: 0.5, fear: 0, emi: 1 });

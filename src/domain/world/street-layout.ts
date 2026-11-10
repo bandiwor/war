@@ -21,7 +21,7 @@ export interface BoxPiece {
   readonly solid: boolean;
 }
 
-export type PropKind = 'barrel' | 'crate' | 'lampPost' | 'fungus';
+export type PropKind = 'barrel' | 'crate' | 'lampPost' | 'fungus' | 'tree' | 'rock';
 
 export interface PropPiece {
   readonly kind: PropKind;
@@ -42,6 +42,8 @@ export interface LightPiece {
   readonly range: number;
   /** 0 = steady, 1 = badly flickering. */
   readonly flicker: number;
+  /** Window panes: the axis the pane faces (its wall's normal). */
+  readonly facing?: 'x' | 'z' | undefined;
 }
 
 /** Invisible collision-only walls (street ends, alley backs). */
@@ -66,7 +68,7 @@ export interface TargetPiece {
 
 /** Layout of any playable area (street, range…). Consumed by render, physics, audio and spawns. */
 export interface StreetLayout {
-  readonly kind: 'street' | 'range';
+  readonly kind: 'street' | 'range' | 'world';
   readonly targets: readonly TargetPiece[];
   readonly zones: readonly ZoneVolume[];
   readonly boxes: readonly BoxPiece[];

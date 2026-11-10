@@ -49,3 +49,20 @@ export function modulatePostFx(
   out.lensDistortion.params.strength = base.lensDistortion.params.strength;
   return out;
 }
+
+/**
+ * Weather on the lens: rain adds droplets on top of the configured amount
+ * (only scales a parameter; whether the effect is on stays the user's choice).
+ */
+export function applyWeatherToPostFx(
+  base: PostFxConfig,
+  wetness: number,
+  out: PostFxConfig,
+): PostFxConfig {
+  out.lensDirt.params.droplets = clamp(
+    base.lensDirt.params.droplets + 0.75 * clamp(wetness, 0, 1),
+    0,
+    1,
+  );
+  return out;
+}

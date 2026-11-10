@@ -19,6 +19,8 @@ export interface AmbienceContext {
   /** 0 = open air, 1 = fully enclosed (from acoustic probes). */
   indoor: number;
   rain: number;
+  /** 0 = still, 1 = gale (weather). The zone profile is tuned for the typical 0.35. */
+  wind: number;
 }
 
 export interface AmbientMix {
@@ -38,6 +40,9 @@ export interface AmbientMix {
   distantWeights: Record<DistantKind, number>;
 }
 
+/** Wind strength the zone soundscapes were authored for (no weather scaling at this value). */
+export const TYPICAL_WIND = 0.35;
+
 export function createAmbienceContext(): AmbienceContext {
   return {
     zones: { abandonedCity: 1 },
@@ -47,6 +52,7 @@ export function createAmbienceContext(): AmbienceContext {
     health: 1,
     indoor: 0,
     rain: 0,
+    wind: TYPICAL_WIND,
   };
 }
 
@@ -124,7 +130,8 @@ function blendZones(zones: AmbienceContext['zones'], out: AmbientMix): void {
  *  - danger adds sub rumble, a heartbeat and more distant events;
  *  - low health muffles the world, adds the heartbeat and tinnitus;
  *  - being indoors filters the wind and brings up room tone;
- *  - rain masks insects.
+ *  - rain masks insects;
+ *  - weather wind scales the wind layer (authored for TYPICAL_WIND) and makes it gustier.
  */
 export function computeMix(ctx: AmbienceContext, out: AmbientMix): AmbientMix {
   blendZones(ctx.zones, out);
@@ -137,7 +144,16 @@ export function computeMix(ctx: AmbienceContext, out: AmbientMix): AmbientMix {
 
   out.insects.gain *=
     (0.35 + 0.65 * night) * (1 - 0.95 * smooth(0.1, 0.6, prox)) * (1 - 0.7 * rain) * (1 - indoor);
-  out.wind.gain *= (1 - 0.25 * night) * (1 - 0.85 * indoor);
+  const wind = clamp(ctx.wind, 0, 1);
+  out.wind.gain = clamp(
+    out.wind.gain *
+      (0.45 + (0.55 * wind) / TYPICAL_WIND) *
+      (1 - 0.25 * night) *
+      (1 - 0.85 * indoor),
+    0,
+    1,
+  );
+  out.wind.gustiness = clamp(out.wind.gustiness + 0.5 * (wind - TYPICAL_WIND), 0, 1);
   out.wind.brightness *= 1 - 0.7 * indoor;
   out.roomTone.gain = Math.max(out.roomTone.gain, 0.35 * indoor);
   out.rumble.gain = clamp(out.rumble.gain + 0.45 * danger, 0, 1);

@@ -43,7 +43,13 @@ async function bootstrap(): Promise<void> {
   if (playing !== null && playing.scene === 'empty')
     throw new Error('Empty-world replays have no renderable scene');
   const kind: SandboxKind =
-    playing !== null ? (playing.scene === 'range' ? 'range' : 'street') : opts.scene;
+    playing !== null
+      ? playing.scene === 'range'
+        ? 'range'
+        : playing.scene === 'world'
+          ? 'world'
+          : 'street'
+      : opts.scene;
   const runSeed = seed(playing?.seed ?? opts.seed);
   const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE), { kind });
   const canvas = document.createElement('canvas');
@@ -132,7 +138,7 @@ async function bootstrap(): Promise<void> {
     commands = new CommandQueue(device);
     const recording = new RecordingInput(commands);
     recorder = new ReplayRecorder(
-      kind === 'range' ? 'range' : 'sandbox',
+      kind === 'range' ? 'range' : kind === 'world' ? 'world' : 'sandbox',
       runSeed,
       TICK_RATE,
       TICK_RATE,
@@ -183,6 +189,10 @@ async function bootstrap(): Promise<void> {
     input,
     presenter: presentWithAudio,
     onTick,
+    clock: () => performance.now(),
+    onTickTime: (ms) => {
+      presenter.profiler.simMs.push(ms);
+    },
   });
   loop.start();
   root.dataset['ready'] = '1';
@@ -256,6 +266,14 @@ function reportBenchmark(root: HTMLElement, presenter: BodycamPresenter, seconds
     gpuMs: p.gpuTimingAvailable && p.gpuMs.count > 0 ? Number(p.gpuMs.mean().toFixed(2)) : null,
     internal: `${String(size.width)}x${String(size.height)}`,
     drawCalls: p.drawCalls,
+    simP99: Number(p.simMs.percentile(0.99).toFixed(3)),
+    ...(presenter.world === null
+      ? {}
+      : {
+          streamP99: Number(presenter.world.chunks.frameMs.percentile(0.99).toFixed(3)),
+          streamMax: Number(presenter.world.chunks.maxFrameMs.toFixed(3)),
+          chunks: presenter.world.chunks.attachedTotal,
+        }),
     meets60: p.frameMs.percentile(0.95) <= 1000 / 55,
   };
   root.dataset['bench'] = JSON.stringify(result);

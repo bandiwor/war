@@ -8,6 +8,7 @@ import {
 } from '../../application/scenes/sandbox';
 import { clonePostFx, defaultPostFx, type PostFxConfig } from '../../domain/bodycam/effects';
 import {
+  applyWeatherToPostFx,
   createStimulus,
   modulatePostFx,
   type BodycamStimulus,
@@ -19,7 +20,11 @@ import type { EffectFactories, FrameInfo } from './postfx/types';
 import { FrameProfiler } from './profiler';
 import type { QualitySettings } from './quality';
 import { Flashlight } from './scene/flashlight';
-import { animateStreet, buildStreetScene, type StreetScene } from './scene/street-scene';
+import type { SceneRig } from './scene/scene-rig';
+import { StreetRig } from './scene/street-rig';
+import { WorldRig } from './world/world-rig';
+import { createChunkSource } from './world/chunk-source';
+import { MATERIALS, type MaterialId } from '../../domain/procgen/materials';
 import { MaterialLibrary } from './textures/material-library';
 import { Viewmodel } from './weapons/viewmodel';
 import { CombatFx } from './weapons/combat-fx';
@@ -83,7 +88,7 @@ export class BodycamPresenter implements Presenter {
 
   private constructor(
     private readonly options: BodycamPresenterOptions,
-    private readonly street: StreetScene,
+    private readonly sceneRig: SceneRig,
     private readonly materials: MaterialLibrary,
     renderer: THREE.WebGLRenderer,
   ) {
@@ -92,9 +97,9 @@ export class BodycamPresenter implements Presenter {
     this.camera = new THREE.PerspectiveCamera(78, 16 / 9, 0.05, 160);
     this.rig = new BodycamRig(this.camera);
     this.flashlight = new Flashlight(q.shadowMapSize);
-    street.scene.add(this.flashlight.light, this.flashlight.light.target);
+    sceneRig.scene.add(this.flashlight.light, this.flashlight.light.target);
     this.combatFx = new CombatFx(options.sandbox);
-    street.scene.add(this.combatFx.group);
+    sceneRig.scene.add(this.combatFx.group);
     const depth = new THREE.DepthTexture(1, 1);
     depth.type = THREE.UnsignedIntType;
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -130,6 +135,7 @@ export class BodycamPresenter implements Presenter {
         flashlightOn: true,
         signalLost: false,
         mode: options.playback === true ? 'play' : 'rec',
+        clock: null,
       },
       frozen: options.frozenTime !== undefined,
     };
@@ -160,8 +166,19 @@ export class BodycamPresenter implements Presenter {
       options.quality.textureSize,
       Math.min(8, renderer.capabilities.getMaxAnisotropy()),
     );
-    const street = buildStreetScene(options.sandbox.layout, materials, seed);
-    const presenter = new BodycamPresenter(options, street, materials, renderer);
+    const sandbox = options.sandbox;
+    const rig =
+      sandbox.kind === 'world'
+        ? await WorldRig.create({
+            materials,
+            quality: options.quality,
+            seed,
+            source: createChunkSource(seed),
+            clock: options.clock,
+            start: [sandbox.layout.spawn.position[0], sandbox.layout.spawn.position[2]],
+          })
+        : new StreetRig(sandbox.layout, materials, seed);
+    const presenter = new BodycamPresenter(options, rig, materials, renderer);
     await presenter.warmUp();
     return presenter;
   }
@@ -171,7 +188,17 @@ export class BodycamPresenter implements Presenter {
     readRenderView(this.options.sandbox, 1, this.view);
     this.rig.update(this.view, null, 0, 0);
     this.combatFx.setWarmup(true);
-    await this.renderer.compileAsync(this.street.scene, this.camera);
+    // Streamed worlds: compile every material/prop shader now, not when its zone first streams in.
+    const extra =
+      this.sceneRig instanceof WorldRig
+        ? this.sceneRig.warmupObjects(
+            this.materials,
+            Object.keys(MATERIALS).filter((id): id is MaterialId => Object.hasOwn(MATERIALS, id)),
+          )
+        : null;
+    if (extra !== null) this.sceneRig.scene.add(extra);
+    await this.renderer.compileAsync(this.sceneRig.scene, this.camera);
+    if (extra !== null) this.sceneRig.scene.remove(extra);
     await this.renderer.compileAsync(this.viewmodel.scene, this.camera);
     this.combatFx.setWarmup(false);
     const saved = clonePostFx(this.postFx);
@@ -192,10 +219,10 @@ export class BodycamPresenter implements Presenter {
       });
       this.colliderLines = new THREE.LineSegments(geometry, material);
       this.colliderLines.frustumCulled = false;
-      this.street.scene.add(this.colliderLines);
+      this.sceneRig.scene.add(this.colliderLines);
     }
     if (!enabled && this.colliderLines !== null) {
-      this.street.scene.remove(this.colliderLines);
+      this.sceneRig.scene.remove(this.colliderLines);
       this.colliderLines.geometry.dispose();
       const m = this.colliderLines.material;
       if (!Array.isArray(m)) m.dispose();
@@ -258,6 +285,11 @@ export class BodycamPresenter implements Presenter {
     return g.steps.map((s) => s.pass.id).join(' → ');
   }
 
+  /** The streamed open world, when this presenter draws one. */
+  get world(): WorldRig | null {
+    return this.sceneRig instanceof WorldRig ? this.sceneRig : null;
+  }
+
   get bakeTimes(): ReadonlyMap<string, number> {
     return this.materials.bakeMs;
   }
@@ -299,6 +331,7 @@ export class BodycamPresenter implements Presenter {
     view.stimulus.emi = s.emi;
     clonePostFx(this.postFx, this.effective);
     modulatePostFx(this.postFx, this.stimulus, this.effective);
+    applyWeatherToPostFx(this.postFx, this.sceneRig.wetness, this.effective);
     const fx = this.effective;
 
     this.rig.update(
@@ -308,7 +341,7 @@ export class BodycamPresenter implements Presenter {
       frozen !== undefined ? 0 : dt,
     );
     this.flashlight.update(this.camera, view.flashlightOn, view.battery, time);
-    animateStreet(this.street, time);
+    this.sceneRig.update(view, this.camera, time, this.flashlight);
     this.updateColliderOverlay();
 
     // Aiming zooms the lens (the rifle's optic most of all).
@@ -325,7 +358,7 @@ export class BodycamPresenter implements Presenter {
 
     this.renderer.setRenderTarget(this.sceneTarget);
     this.renderer.setViewport(0, 0, this.internalWidth, this.internalHeight);
-    this.renderer.render(this.street.scene, this.camera);
+    this.renderer.render(this.sceneRig.scene, this.camera);
     // First-person weapon in its own pass: depth cleared so it never clips into walls.
     this.renderer.autoClear = false;
     this.renderer.clearDepth();
@@ -360,6 +393,7 @@ export class BodycamPresenter implements Presenter {
     f.osd.battery = view.battery;
     f.osd.flashlightOn = view.flashlightOn;
     f.osd.signalLost = f.signalLoss > 0.6;
+    f.osd.clock = view.env.active ? view.env.timeOfDay : null;
 
     this.pipeline.render(this.sceneTarget.texture, fx, f);
     f.prevViewProj.copy(this.viewProj);
@@ -377,7 +411,7 @@ export class BodycamPresenter implements Presenter {
     this.combatFx.dispose();
     this.flashlight.dispose();
     this.sceneTarget.dispose();
-    this.street.dispose();
+    this.sceneRig.dispose();
     this.materials.dispose();
     this.renderer.dispose();
   }

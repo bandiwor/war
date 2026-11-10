@@ -10,6 +10,12 @@ export interface GameLoopOptions {
   readonly maxStepsPerFrame?: number;
   /** Optional hook after each simulated tick (replay recording, debug tools). */
   readonly onTick?: (sim: Simulation) => void;
+  /**
+   * Optional wall clock (ms) and sink for each tick's cost: the profiler checks
+   * the simulation's frame budget. Injected because game logic has no clock.
+   */
+  readonly clock?: () => number;
+  readonly onTickTime?: (ms: number) => void;
 }
 
 /** Glues a frame source to the fixed-step simulation and a presenter. */
@@ -92,7 +98,10 @@ export class GameLoop {
 
   private simulateOne(): void {
     const sim = this.options.simulation;
+    const { clock, onTickTime } = this.options;
+    const t0 = clock?.() ?? 0;
     sim.step(this.options.input.commandsFor(sim.tick));
+    if (clock !== undefined && onTickTime !== undefined) onTickTime(clock() - t0);
     this.options.onTick?.(sim);
   }
 }

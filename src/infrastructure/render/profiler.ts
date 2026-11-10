@@ -18,6 +18,8 @@ export class FrameProfiler {
   readonly frameMs = new Ring();
   readonly cpuMs = new Ring();
   readonly gpuMs = new Ring();
+  /** Simulation cost per tick (fed by the game loop). */
+  readonly simMs = new Ring();
   drawCalls = 0;
   triangles = 0;
   private lastFrameStart = -1;

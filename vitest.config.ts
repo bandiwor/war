@@ -23,6 +23,9 @@ export default defineConfig({
         'src/infrastructure/audio/{audio-engine,footstep-player,ambience.worklet,weapon-audio}.ts',
         // Three.js viewmodel/effects: exercised by e2e/range.spec.ts and the visual suite.
         'src/infrastructure/render/weapons/{viewmodel,combat-fx,weapon-models}.ts',
+        // Open world: WebGL shaders, the Worker pool and the scene rig, exercised by e2e/world.spec.ts
+        // (meshing, streaming, the light pool and lighting are unit-tested).
+        'src/infrastructure/render/world/{world-rig,rain,sky,chunk-overlay,chunk.worker,chunk-source}.ts',
       ],
       // Branch thresholds are lower than line thresholds because every typed-array
       // read needs a `?? 0` fallback under noUncheckedIndexedAccess, and v8 counts

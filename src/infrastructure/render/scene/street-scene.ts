@@ -2,15 +2,8 @@ import * as THREE from 'three';
 import type { MaterialId } from '../../../domain/procgen/materials';
 import type { LightPiece, PropKind, StreetLayout } from '../../../domain/world/street-layout';
 import type { MaterialLibrary } from '../textures/material-library';
-import {
-  mergeOrThrow,
-  barrelGeometry,
-  crateGeometry,
-  fungusGeometry,
-  lampBulbGeometry,
-  lampPostGeometry,
-  meterBox,
-} from './geometry';
+import { lampBulbGeometry, mergeOrThrow, meterBox } from './geometry';
+import { PropLibrary } from './prop-library';
 
 /**
  * Builds the Three.js scene for a street layout. Static boxes are merged per
@@ -82,12 +75,8 @@ export function buildStreetScene(
   }
 
   // Instanced props.
-  const geometryFor: Record<Exclude<PropKind, 'fungus'>, THREE.BufferGeometry> = {
-    barrel: barrelGeometry(),
-    crate: crateGeometry(),
-    lampPost: lampPostGeometry(),
-  };
-  disposables.push(...Object.values(geometryFor));
+  const props = new PropLibrary(materials, seed);
+  disposables.push(props);
   const groups = new Map<
     string,
     { kind: PropKind; material: MaterialId; items: StreetLayout['props'][number][] }
@@ -98,34 +87,22 @@ export function buildStreetScene(
     group.items.push(p);
     groups.set(key, group);
   }
-  const fungusMaterial = new THREE.MeshStandardMaterial({
-    color: 0x0b2a24,
-    emissive: new THREE.Color(0.2, 1.0, 0.8),
-    emissiveIntensity: 2.2,
-    roughness: 0.35,
-    metalness: 0,
-  });
-  const fungusGeom = fungusGeometry(seed);
-  disposables.push(fungusMaterial, fungusGeom);
+  const fungusMaterial = props.fungusMaterial;
   for (const g of groups.values()) {
-    const isFungus = g.kind === 'fungus';
-    const geometry = g.kind === 'fungus' ? fungusGeom : geometryFor[g.kind];
-    const mesh = new THREE.InstancedMesh(
-      geometry,
-      isFungus ? fungusMaterial : materials.get(g.material),
-      g.items.length,
-    );
-    mesh.name = `props:${g.kind}:${g.material}`;
-    g.items.forEach((p, i) => {
-      tmpQuat.setFromAxisAngle(UP, p.yaw);
-      tmpPos.set(p.position[0], p.position[1], p.position[2]);
-      tmpScale.setScalar(p.scale);
-      mesh.setMatrixAt(i, tmpMatrix.compose(tmpPos, tmpQuat, tmpScale));
-    });
-    mesh.castShadow = !isFungus;
-    mesh.receiveShadow = true;
-    mesh.computeBoundingSphere();
-    scene.add(mesh);
+    for (const part of props.parts(g.kind, g.material)) {
+      const mesh = new THREE.InstancedMesh(part.geometry, part.material, g.items.length);
+      mesh.name = `props:${g.kind}:${g.material}`;
+      g.items.forEach((p, i) => {
+        tmpQuat.setFromAxisAngle(UP, p.yaw);
+        tmpPos.set(p.position[0], p.position[1], p.position[2]);
+        tmpScale.setScalar(p.scale);
+        mesh.setMatrixAt(i, tmpMatrix.compose(tmpPos, tmpQuat, tmpScale));
+      });
+      mesh.castShadow = part.castShadow;
+      mesh.receiveShadow = true;
+      mesh.computeBoundingSphere();
+      scene.add(mesh);
+    }
   }
 
   // Ambient: faint cold moonlight and sky bounce.

@@ -23,6 +23,16 @@ import type { CharacterId, CharacterMove, PhysicsPort, Point } from '../physics/
 import { buildStaticColliders } from '../physics/static-world';
 import { PlayerIntent, SelectIntent, TICK_RATE, intentSystem } from './empty-world';
 import { generateRangeLayout } from '../../domain/world/range-layout';
+import { generateWorldLayout } from '../../domain/world/world-layout';
+import { ChunkColliders } from '../world/chunk-colliders';
+import {
+  createEnvironmentView,
+  Environment,
+  environmentSystem,
+  readEnvironment,
+  spawnEnvironment,
+  type EnvironmentView,
+} from '../world/environment-system';
 import {
   Ammo,
   Hazard,
@@ -295,6 +305,46 @@ function flashlightSystem(player: EntityId): System<SimContext> {
   };
 }
 
+/**
+ * Debug teleports, then collider streaming around the player's feet. Runs
+ * before the motor so the floor under a teleported player already exists.
+ */
+function worldStreamingSystem(
+  player: EntityId,
+  physics: PhysicsPort,
+  colliders: ChunkColliders,
+): System<SimContext> {
+  const feet: Point = { x: 0, y: 0, z: 0 };
+  return {
+    name: 'world.streaming',
+    after: ['input.intent'],
+    before: ['player.motor'],
+    run(ctx) {
+      const pose = ctx.world.store(Pose);
+      const row = pose.rowOf(player);
+      const motor = ctx.world.store(Motor);
+      const mrow = motor.rowOf(player);
+      if (row < 0 || mrow < 0) return;
+      const id = characterId(at(motor.fields.character, mrow));
+      const commands = ctx.commands;
+      for (let i = 0; i < commands.length; i++) {
+        const c = commands[i];
+        if (c?.type !== 'teleport') continue;
+        physics.setCharacterFeet(id, [c.x, c.y, c.z]);
+        const p = pose.fields;
+        p.x[row] = p.prevX[row] = c.x;
+        p.y[row] = p.prevY[row] = c.y;
+        p.z[row] = p.prevZ[row] = c.z;
+        motor.fields.vx[mrow] = 0;
+        motor.fields.vy[mrow] = 0;
+        motor.fields.vz[mrow] = 0;
+      }
+      physics.characterFeet(id, feet);
+      colliders.update(feet.x, feet.z);
+    },
+  };
+}
+
 function characterId(raw: number): CharacterId {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- brand restore: the u32 column only ever stores ids returned by PhysicsPort.createCharacter
   return raw as CharacterId;
@@ -307,9 +357,11 @@ export interface Sandbox {
   readonly physics: PhysicsPort;
   readonly tuning: PlayerTuning;
   readonly kind: SandboxKind;
+  /** Collider streaming (open world only). */
+  readonly chunks: ChunkColliders | null;
 }
 
-export type SandboxKind = 'street' | 'range';
+export type SandboxKind = 'street' | 'range' | 'world';
 
 export interface SandboxOptions {
   readonly kind?: SandboxKind;
@@ -324,8 +376,15 @@ export function createSandbox(
 ): Sandbox {
   const kind = options.kind ?? 'street';
   const tuning = options.tuning ?? PLAYER_TUNING;
-  const layout = kind === 'range' ? generateRangeLayout(seed) : generateStreetLayout(seed);
+  const layout =
+    kind === 'range'
+      ? generateRangeLayout(seed)
+      : kind === 'world'
+        ? generateWorldLayout()
+        : generateStreetLayout(seed);
   buildStaticColliders(layout, physics);
+  const chunks = kind === 'world' ? new ChunkColliders(seed, physics) : null;
+  chunks?.loadAllAround(layout.spawn.position[0], layout.spawn.position[2]);
   const world = new World();
   world.register(PlayerIntent);
   world.register(Pose);
@@ -340,6 +399,7 @@ export function createSandbox(
   world.register(Rocket);
   world.register(Hazard);
   world.register(Target);
+  if (kind === 'world') world.register(Environment);
   const player = world.spawn();
   world.store(SelectIntent).fields.slot[world.store(SelectIntent).add(player)] = -1;
   const irow = world.store(PlayerIntent).add(player);
@@ -372,6 +432,13 @@ export function createSandbox(
   fl.fields.battery[frow] = 1;
   giveLoadout(world, player, { infinite: kind === 'range', startSlot: kind === 'range' ? 2 : 0 });
   spawnTargets(world, layout.targets);
+  const worldSystems: System<SimContext>[] = [];
+  if (chunks !== null) {
+    worldSystems.push(
+      worldStreamingSystem(player, physics, chunks),
+      environmentSystem(spawnEnvironment(world), seed),
+    );
+  }
   const eyeOf = (
     w: World,
     out: { x: number; y: number; z: number; yaw: number; pitch: number; speed: number },
@@ -414,6 +481,7 @@ export function createSandbox(
       thrownSystem(physics),
       hazardSystem(),
       targetSystem(kind === 'range'),
+      ...worldSystems,
     ],
     hashExtras: [
       (h) => {
@@ -421,7 +489,7 @@ export function createSandbox(
       },
     ],
   });
-  return { simulation, player, layout, physics, tuning, kind };
+  return { simulation, player, layout, physics, tuning, kind, chunks };
 }
 
 /** Everything the renderer needs for one frame, interpolated. Reused, never reallocated. */
@@ -444,6 +512,7 @@ export interface RenderView {
   tick: number;
   stimulus: BodycamStimulus;
   weapon: WeaponView;
+  env: EnvironmentView;
 }
 
 /** What the viewmodel/HUD-less presentation needs about the weapon in hand. */
@@ -541,6 +610,7 @@ export function createRenderView(): RenderView {
     tick: 0,
     stimulus: createStimulus(),
     weapon: createWeaponView(),
+    env: createEnvironmentView(),
   };
 }
 
@@ -572,6 +642,7 @@ export function readRenderView(sandbox: Sandbox, alpha: number, out: RenderView)
   out.flashlightOn = frow >= 0 && fl.fields.on[frow] === 1;
   out.battery = frow >= 0 ? at(fl.fields.battery, frow) : 0;
   readWeaponView(sandbox, out.weapon);
+  readEnvironment(simulation.world, out.env);
   out.tick = simulation.tick;
   out.simTime = Math.max(0, (simulation.tick - 1 + a) / simulation.tickRate);
   return out;

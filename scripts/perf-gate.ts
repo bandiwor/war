@@ -10,12 +10,18 @@ import { createEmptyWorld } from '../src/application/scenes/empty-world';
 import { createSandbox } from '../src/application/scenes/sandbox';
 import { createRapierPhysics } from '../src/infrastructure/physics/rapier-physics';
 import type { Simulation } from '../src/application/simulation';
+import type { InputCommand } from '../src/domain/input/commands';
 import { seed } from '../src/domain/core/brand';
 import { createChurnWorld } from '../tests/fixtures/churn-world';
 
 const Budget = z.object({ minTicksPerSecond: z.number(), maxMinorGcPerMillionTicks: z.number() });
 const budgets = z
-  .object({ emptyWorld: Budget, churnWorld: Budget, sandbox: Budget })
+  .object({
+    emptyWorld: Budget,
+    churnWorld: Budget,
+    sandbox: Budget,
+    worldStreaming: Budget.extend({ maxP999TickMs: z.number() }),
+  })
   .parse(JSON.parse(readFileSync(new URL('../perf-budgets.json', import.meta.url), 'utf8')));
 
 let minorGcs = 0;
@@ -39,6 +45,49 @@ async function walkingSandbox(): Promise<Simulation> {
 }
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50));
+
+/**
+ * Open world: sprint along the main avenue and turn back every 40 s, so
+ * collider chunks keep streaming in and out. Besides throughput, every tick
+ * is timed: chunk loads are time-sliced, so even the slowest ticks must stay
+ * inside the simulation's frame budget.
+ */
+async function measureWorld(
+  ticks: number,
+): Promise<{ tps: number; gcPerM: number; p999: number; max: number; loads: number }> {
+  const sb = createSandbox(seed(1), await createRapierPhysics(60), { kind: 'world' });
+  const sim = sb.simulation;
+  const go: InputCommand[] = [
+    { type: 'move', forward: 1, strafe: 0 },
+    { type: 'action', action: 'sprint', pressed: true },
+  ];
+  const turn: InputCommand[] = [{ type: 'look', yaw: Math.PI, pitch: 0 }];
+  const commandsAt = (t: number): readonly InputCommand[] =>
+    t === 0 ? go : t % 2400 === 0 ? turn : [];
+  for (let t = 0; t < 20_000; t++) sim.step(commandsAt(sim.tick)); // JIT warm-up
+  await flush();
+  minorGcs = 0;
+  const times = new Float64Array(ticks);
+  const loads0 = sb.chunks?.loadsTotal ?? 0;
+  const t0 = performance.now();
+  for (let i = 0; i < ticks; i++) {
+    const a = performance.now();
+    sim.step(commandsAt(sim.tick));
+    times[i] = performance.now() - a;
+  }
+  const elapsed = performance.now() - t0;
+  await flush();
+  const sorted = Array.from(times).sort((x, y) => x - y);
+  const p999 = sorted[Math.floor(sorted.length * 0.999)] ?? 0;
+  const max = sorted[sorted.length - 1] ?? 0;
+  const tps = Math.round((ticks / elapsed) * 1000);
+  const gcPerM = (minorGcs / ticks) * 1_000_000;
+  const loads = (sb.chunks?.loadsTotal ?? 0) - loads0;
+  console.log(
+    `worldStreaming: ${tps.toLocaleString('en')} ticks/s, ${String(minorGcs)} minor GCs, ${String(loads)} chunk loads, tick p99.9 ${p999.toFixed(3)} ms, max ${max.toFixed(3)} ms over ${ticks.toLocaleString('en')} ticks`,
+  );
+  return { tps, gcPerM, p999, max, loads };
+}
 
 async function measure(
   name: string,
@@ -65,6 +114,7 @@ const results = {
   churnWorld: await measure('churnWorld', createChurnWorld(seed(1)), 200_000),
   sandbox: await measure('sandbox', await walkingSandbox(), 300_000),
 };
+const world = await measureWorld(200_000);
 observer.disconnect();
 
 let failed = false;
@@ -81,6 +131,31 @@ for (const name of ['emptyWorld', 'churnWorld', 'sandbox'] as const) {
     );
     failed = true;
   }
+}
+const wb = budgets.worldStreaming;
+if (world.loads < 50) {
+  console.error(
+    `FAIL worldStreaming: only ${String(world.loads)} chunk loads; the route no longer streams`,
+  );
+  failed = true;
+}
+if (world.tps < wb.minTicksPerSecond) {
+  console.error(
+    `FAIL worldStreaming: ${String(world.tps)} ticks/s < ${String(wb.minTicksPerSecond)}`,
+  );
+  failed = true;
+}
+if (world.gcPerM > wb.maxMinorGcPerMillionTicks) {
+  console.error(
+    `FAIL worldStreaming: ${world.gcPerM.toFixed(1)} minor GCs per 1M ticks > ${String(wb.maxMinorGcPerMillionTicks)}`,
+  );
+  failed = true;
+}
+if (world.p999 > wb.maxP999TickMs) {
+  console.error(
+    `FAIL worldStreaming: tick p99.9 ${world.p999.toFixed(3)} ms > ${String(wb.maxP999TickMs)} ms`,
+  );
+  failed = true;
 }
 if (failed) process.exit(1);
 console.log('perf gate: OK');

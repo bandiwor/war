@@ -13,7 +13,7 @@ import { isQualityName, type QualityName } from '../infrastructure/render/qualit
  *   ?signal=0.8         force a signal-loss level
  *   ?bench=20           benchmark: scripted walk for N seconds, then a frame-time report
  *   ?replay=session     play back the replay stored by the debug menu (Sim tab)
- *   ?scene=range        the debug shooting range instead of the street
+ *   ?scene=world|street|range  the open world (default), the stage-1 test street, or the shooting range
  *   ?stim=damage:0.5,fear:0.2,emi:0
  *   ?touch=1|0          force the on-screen phone controls on/off (default: on for touch screens,
  *                       which also default to ?quality=low)
@@ -30,7 +30,7 @@ export interface UrlOptions {
   readonly spin: number;
   readonly benchSeconds: number;
   readonly replay: 'session' | null;
-  readonly scene: 'street' | 'range';
+  readonly scene: 'world' | 'street' | 'range';
   readonly stimulus: BodycamStimulus | null;
   readonly touch: boolean;
 }
@@ -38,6 +38,10 @@ export interface UrlOptions {
 function num(v: string | null, fallback: number): number {
   const n = Number(v);
   return v === null || v === '' || !Number.isFinite(n) ? fallback : n;
+}
+
+function sceneOf(v: string | null): UrlOptions['scene'] {
+  return v === 'range' || v === 'street' ? v : 'world';
 }
 
 export function parseUrlOptions(search: string, touchDevice = false): UrlOptions {
@@ -69,7 +73,7 @@ export function parseUrlOptions(search: string, touchDevice = false): UrlOptions
     spin: num(q.get('spin'), 0),
     benchSeconds: Math.max(0, num(q.get('bench'), 0)),
     replay: q.get('replay') === 'session' ? 'session' : null,
-    scene: q.get('scene') === 'range' ? 'range' : 'street',
+    scene: sceneOf(q.get('scene')),
     stimulus,
     touch,
   };

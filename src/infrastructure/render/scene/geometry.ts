@@ -109,3 +109,65 @@ export function fungusGeometry(seed: number): THREE.BufferGeometry {
   g.computeVertexNormals();
   return g;
 }
+
+/** Scales a geometry's UVs so they are in metres for a part of size (su, sv). */
+function scaleUv(g: THREE.BufferGeometry, su: number, sv: number): void {
+  const uv = g.getAttribute('uv');
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+}
+
+/** Pine trunk, origin at the base (9 m, tapering). */
+export function treeTrunkGeometry(): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(0.07, 0.22, 9, 8, 4);
+  g.translate(0, 4.5, 0);
+  scaleUv(g, 2 * Math.PI * 0.15, 9);
+  return g;
+}
+
+/** Conifer canopy: stacked ragged cones, displaced by tileable noise so tiers look like boughs. */
+export function treeCanopyGeometry(seed: number): THREE.BufferGeometry {
+  const tiers: THREE.BufferGeometry[] = [];
+  const v = new THREE.Vector3();
+  for (let k = 0; k < 5; k++) {
+    const radius = 2.4 * (1 - k / 5.5) + 0.25;
+    const height = 2.6;
+    const cone = new THREE.ConeGeometry(radius, height, 10, 2);
+    cone.translate(0, 3.2 + k * 1.45 + height / 2, 0);
+    const pos = cone.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const n = gradient2(v.x * 1.7 + k * 3.1, v.z * 1.7 + v.y * 0.9, 32, seed + k);
+      const r = Math.hypot(v.x, v.z);
+      if (r > 1e-3) {
+        const s = 1 + 0.28 * n;
+        v.x *= s;
+        v.z *= s;
+      }
+      v.y += 0.25 * n;
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    scaleUv(cone, 2 * Math.PI * radius, height);
+    tiers.push(cone.toNonIndexed());
+  }
+  const merged = mergeOrThrow(tiers);
+  for (const t of tiers) t.dispose();
+  merged.computeVertexNormals();
+  return merged;
+}
+
+/** Boulder: a lumpy, flattened icosphere sunk a little into the ground. */
+export function rockGeometry(seed: number): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(0.9, 2);
+  const pos = g.getAttribute('position');
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = gradient2(v.x * 1.9 + 4, v.z * 1.9 + v.y * 1.3 + 4, 64, seed);
+    v.multiplyScalar(1 + 0.3 * n);
+    v.y = v.y * 0.6 + 0.35;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  scaleUv(g, 3, 1.5);
+  g.computeVertexNormals();
+  return g;
+}

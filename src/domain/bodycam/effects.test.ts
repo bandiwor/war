@@ -10,7 +10,7 @@ import {
   getEffectParam,
   setEffectParam,
 } from './effects';
-import { createStimulus, modulatePostFx } from './stimulus';
+import { applyWeatherToPostFx, createStimulus, modulatePostFx } from './stimulus';
 
 describe('post effect registry', () => {
   it('lists every effect once, sorted by order, with sane param specs', () => {
@@ -101,5 +101,20 @@ describe('stimulus modulation', () => {
     expect(out.signalLoss.params.ratePerMinute).toBeCloseTo(
       base.signalLoss.params.ratePerMinute + 40,
     );
+  });
+});
+
+describe('weather on the lens', () => {
+  it('rain adds droplets on top of the configured amount, capped at 1', () => {
+    const base = defaultPostFx();
+    const out = defaultPostFx();
+    expect(applyWeatherToPostFx(base, 0, out).lensDirt.params.droplets).toBe(
+      base.lensDirt.params.droplets,
+    );
+    expect(applyWeatherToPostFx(base, 0.5, out).lensDirt.params.droplets).toBeGreaterThan(
+      base.lensDirt.params.droplets,
+    );
+    expect(applyWeatherToPostFx(base, 9, out).lensDirt.params.droplets).toBe(1);
+    expect(out.lensDirt.enabled).toBe(base.lensDirt.enabled);
   });
 });

@@ -44,24 +44,46 @@ flowchart TB
 
 Replays record exactly the per-tick commands from step 3, so playback in Node reproduces the run.
 
+## Open world streaming (ADR-0010)
+
+```mermaid
+flowchart LR
+  gen["domain/world/chunk-gen<br/>generateChunk(seed, cx, cz)<br/>pure"]
+  subgraph sim["simulation (per tick)"]
+    cc["ChunkColliders<br/>ring 1 now · ring 2 prefetch · drop > 3"]
+    rapier[(Rapier)]
+  end
+  subgraph render["renderer (per frame)"]
+    w["chunk workers<br/>generate + mesh"]
+    cr["ChunkRenderer<br/>attach within 1.5 ms"]
+    pool["LightPool<br/>fixed real lights"]
+  end
+  gen --> cc --> rapier
+  gen --> w --> cr --> pool
+```
+
+Both sides derive chunk content from the seed alone. The simulation streams around the player's
+feet on ticks, so replays reproduce it. The renderer streams around the camera on frames, so it
+never touches the state hash.
+
 ## Folder map
 
-| Path                         | Contents                                                      |
-| ---------------------------- | ------------------------------------------------------------- |
-| `src/domain/core`            | Branded types (`Seed`, `Tick`), `assertNever`, `invariant`    |
-| `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`      |
-| `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule` |
-| `src/domain/input`           | `InputCommand` discriminated union + Zod schema               |
-| `src/domain/procgen`         | Tileable noise, material recipe registry, texture baker       |
-| `src/domain/bodycam`         | Bodycam effect registry, gameplay stimulus modulation         |
-| `src/domain/world`           | Street layout generator (shared by render, later physics/nav) |
-| `src/infrastructure/render`  | WebGL presenter, render graph, post pipeline, effects, scene  |
-| `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`                   |
-| `src/infrastructure/browser` | rAF frame source, keyboard/mouse input                        |
-| `src/presentation`           | Browser composition root, OSD, `debug/`                       |
-| `src/headless`               | Node runner and CLI                                           |
-| `tests/golden`               | Golden hashes and replay files                                |
-| `tests/fixtures`             | Test-only worlds (e.g. the churn stress world)                |
-| `eslint/architecture.js`     | Layer and determinism lint rules                              |
-| `scripts/`                   | Perf gate, bundle check                                       |
-| `docs/adr`                   | Architecture decision records                                 |
+| Path                         | Contents                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `src/domain/core`            | Branded types (`Seed`, `Tick`), `assertNever`, `invariant`                                                              |
+| `src/domain/math`            | `Rng`/`RngStreams`, `StateHasher`, deterministic `dmath`                                                                |
+| `src/domain/ecs`             | `EntityAllocator`, `ComponentStore`, `World`, `buildSchedule`                                                           |
+| `src/domain/input`           | `InputCommand` discriminated union + Zod schema                                                                         |
+| `src/domain/procgen`         | Tileable noise, material recipe registry, texture baker                                                                 |
+| `src/domain/bodycam`         | Bodycam effect registry, gameplay stimulus modulation                                                                   |
+| `src/domain/world`           | World map (hubs, roads), chunk grid + generator, clock/weather, street & range layouts                                  |
+| `src/infrastructure/render`  | WebGL presenter, render graph, post pipeline, effects, scene; `world/`: chunk workers, streaming, light pool, sky, rain |
+| `src/application`            | `Simulation`, `loop/`, `replay/`, `scenes/`; `world/`: collider streaming, environment system                           |
+| `src/infrastructure/browser` | rAF frame source, keyboard/mouse and touch input                                                                        |
+| `src/presentation`           | Browser composition root, OSD, `debug/`                                                                                 |
+| `src/headless`               | Node runner and CLI                                                                                                     |
+| `tests/golden`               | Golden hashes and replay files                                                                                          |
+| `tests/fixtures`             | Test-only worlds (e.g. the churn stress world)                                                                          |
+| `eslint/architecture.js`     | Layer and determinism lint rules                                                                                        |
+| `scripts/`                   | Perf gate, bundle check                                                                                                 |
+| `docs/adr`                   | Architecture decision records                                                                                           |

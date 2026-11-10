@@ -50,6 +50,11 @@ export class Flashlight {
     this.light.shadow.normalBias = 0.02;
   }
 
+  /** Beam direction of the last update (unit vector). */
+  get direction(): THREE.Vector3 {
+    return this.forward;
+  }
+
   /** Mount just below/right of the camera, aimed along its forward. */
   update(camera: THREE.Camera, on: boolean, battery: number, time: number): void {
     camera.getWorldDirection(this.forward);

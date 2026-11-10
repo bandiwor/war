@@ -7,7 +7,7 @@ test.use({ viewport: { width: 480, height: 270 } });
 test.setTimeout(180_000);
 
 async function boot(page: Page, query = ''): Promise<void> {
-  await page.goto(`/?seed=1337&quality=low${query}`);
+  await page.goto(`/?seed=1337&quality=low&scene=street${query}`);
   await expect(page.locator('#app')).toHaveAttribute('data-debug', '1', { timeout: 60_000 });
 }
 

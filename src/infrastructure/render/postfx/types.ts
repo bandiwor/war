@@ -18,6 +18,8 @@ export interface OsdState {
   signalLost: boolean;
   /** Recording live footage, or playing back a replay. */
   mode: 'rec' | 'play';
+  /** In-world time of day (seconds since midnight) when the scene has a clock; else the incident start. */
+  clock: number | null;
 }
 
 /** Per-frame values every pass may read. One instance, mutated each frame. */

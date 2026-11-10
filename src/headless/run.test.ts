@@ -14,4 +14,10 @@ describe('headless run', () => {
     const a = await runHeadless(seed(4), 600, true, 'sandbox');
     expect(await runHeadless(seed(4), 600, true, 'sandbox')).toEqual(a);
   });
+
+  it('runs the streamed open world deterministically', async () => {
+    const a = await runHeadless(seed(5), 600, true, 'world');
+    expect(await runHeadless(seed(5), 600, true, 'world')).toEqual(a);
+    expect(a.hash).not.toBe((await runHeadless(seed(5), 600, true, 'sandbox')).hash);
+  });
 });

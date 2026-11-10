@@ -16,8 +16,9 @@
    },
    ```
 
-2. Place it in the world: add a `ZoneVolume` to the layout (`zones` in
-   `src/domain/world/street-layout.ts` for now; the stage-5 world format will hold zones).
+2. Place it in the world: give it a hub in `HUBS` (`src/domain/world/world-map.ts`) and a chunk
+   generator (see [adding a hub or structure](adding-a-hub-or-structure.md)). Chunks take the zone
+   of the nearest hub, and the soundscape follows automatically.
 3. Audition it: debug menu → **Audio** → zone dropdown (or `window.__warDebug.setZone('hospital')`).
    The layer meters show the balance live.
 4. `npm test` validates the entry against the schema and runs

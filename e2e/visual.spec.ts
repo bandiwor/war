@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
  * events, instant exposure, so output is reproducible on the same rasterizer.
  * Update baselines deliberately: npm run test:e2e -- --update-snapshots
  */
-const BASE = '/?seed=1337&quality=medium&vt=12&ticks=1';
+const BASE = '/?seed=1337&quality=medium&vt=12&ticks=1&scene=street';
 
 const EFFECTS = [
   'autoExposure',

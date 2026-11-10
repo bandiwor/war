@@ -11,7 +11,7 @@ test.setTimeout(180_000);
 type AudioStats = NonNullable<ReturnType<NonNullable<Window['__warDebug']>['audioStats']>>;
 
 async function boot(page: Page): Promise<void> {
-  await page.goto('/?seed=1337&quality=low');
+  await page.goto('/?seed=1337&quality=low&scene=street');
   await expect(page.locator('#app')).toHaveAttribute('data-debug', '1', { timeout: 60_000 });
   await page.mouse.click(240, 135); // user gesture: unlock Web Audio
   await expect

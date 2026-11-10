@@ -4,4 +4,6 @@ export const FRAME_BUDGETS = {
   cpuRender: 4,
   gpu: 11,
   simulation: 2,
+  /** Main-thread chunk streaming (attach/detach GPU buffers); generation runs in workers. */
+  streaming: 1.5,
 } as const;

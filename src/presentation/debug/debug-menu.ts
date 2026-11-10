@@ -9,6 +9,7 @@ import {
 } from '../../domain/bodycam/effects';
 import type { BodycamPresenter } from '../../infrastructure/render/bodycam-presenter';
 import { FRAME_BUDGETS } from '../../infrastructure/render/budgets';
+import { installWorldTab, type WorldDebugApi } from './world-tab';
 import { QUALITY_PRESETS } from '../../infrastructure/render/quality';
 import { downloadReplay, playReplayFile, type GameSession } from '../session';
 import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
@@ -40,6 +41,9 @@ export interface WarDebugApi {
   stats(): {
     fps: number;
     cpuMs: number;
+    /** Simulation cost per tick: mean and p99 (ms). */
+    simMs: number;
+    simP99Ms: number;
     gpuMs: number | null;
     drawCalls: number;
     triangles: number;
@@ -75,6 +79,10 @@ export interface WarDebugApi {
   };
   setZone(zone: string | null): boolean;
   setAudioOverride(key: OverrideKey, value: number | null): void;
+  worldStats: WorldDebugApi['worldStats'];
+  setEnv: WorldDebugApi['setEnv'];
+  teleport: WorldDebugApi['teleport'];
+  setChunkOverlay: WorldDebugApi['setChunkOverlay'];
   audioStats(): {
     zones: Partial<Record<string, number>>;
     levels: Partial<Record<string, number>>;
@@ -88,13 +96,14 @@ export interface WarDebugApi {
   } | null;
 }
 
-type OverrideKey = 'danger' | 'enemyProximity' | 'health' | 'rain' | 'night';
+type OverrideKey = 'danger' | 'enemyProximity' | 'health' | 'rain' | 'night' | 'wind';
 const OVERRIDE_KEYS: readonly OverrideKey[] = [
   'danger',
   'enemyProximity',
   'health',
   'rain',
   'night',
+  'wind',
 ];
 
 declare global {
@@ -329,7 +338,7 @@ export function installDebugMenu({
   const openRange = el(
     'button',
     '',
-    session.sandbox.kind === 'range' ? 'Back to street' : 'Open shooting range',
+    session.sandbox.kind === 'range' ? 'Back to the world' : 'Open shooting range',
   );
   openRange.type = 'button';
   openRange.addEventListener('click', () => {
@@ -340,6 +349,9 @@ export function installDebugMenu({
     window.location.href = url.toString();
   });
   rangeTab.append(weaponInfo, weaponButtons, pathLabel, el('br'), resetBtn, openRange, hitTable);
+
+  // --- World ----------------------------------------------------------------
+  const worldTab = installWorldTab(addSection('World'), session.sandbox, presenter, queue);
 
   // --- Audio ----------------------------------------------------------------
   const audioTab = addSection('Audio');
@@ -364,6 +376,7 @@ export function installDebugMenu({
       enemyProximity: 0,
       health: 1,
       rain: 0,
+      wind: 0.35,
       night: 0.7,
     };
     for (const key of OVERRIDE_KEYS) {
@@ -430,6 +443,8 @@ export function installDebugMenu({
     return {
       fps: p.fps,
       cpuMs: p.cpuMs.mean(),
+      simMs: p.simMs.mean(),
+      simP99Ms: p.simMs.percentile(0.99),
       gpuMs: p.gpuTimingAvailable && p.gpuMs.count > 0 ? p.gpuMs.mean() : null,
       drawCalls: p.drawCalls,
       triangles: p.triangles,
@@ -490,6 +505,7 @@ export function installDebugMenu({
       };
     },
     selectWeapon,
+    ...worldTab.api,
     aimAt(x, y, z) {
       const v = presenter.view;
       const yaw = Math.atan2(-(x - v.x), -(z - v.z));
@@ -566,6 +582,7 @@ export function installDebugMenu({
       renderInfo.textContent = [
         `fps      ${s.fps.toFixed(1)}   (p99 frame ${p.frameMs.percentile(0.99).toFixed(1)} ms)`,
         `cpu      ${s.cpuMs.toFixed(2)} ms${over(s.cpuMs, FRAME_BUDGETS.cpuRender)}`,
+        `sim      ${s.simMs.toFixed(3)} ms/tick  p99 ${s.simP99Ms.toFixed(3)}${over(s.simP99Ms, FRAME_BUDGETS.simulation)}`,
         `gpu      ${s.gpuMs === null ? 'n/a (timer query unavailable)' : `${s.gpuMs.toFixed(2)} ms${over(s.gpuMs, FRAME_BUDGETS.gpu)}`}`,
         `draws    ${String(s.drawCalls)}   tris ${String(s.triangles)}`,
         `internal ${String(size.width)}×${String(size.height)}`,
@@ -574,6 +591,7 @@ export function installDebugMenu({
         `bake     ${[...presenter.bakeTimes].map(([k, v]) => `${k} ${v.toFixed(0)}ms`).join(', ')}`,
       ].join('\n');
       graph.draw(p.frameMs, FRAME_BUDGETS.frame);
+      worldTab.refresh();
       const w = presenter.view.weapon;
       weaponInfo.textContent = [
         `weapon  ${w.id ?? '-'}  (${w.phase}${w.phase === 'reloading' ? ` · ${w.stage}` : ''})`,

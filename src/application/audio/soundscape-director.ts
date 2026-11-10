@@ -10,8 +10,10 @@ import {
   computeMix,
   createAmbienceContext,
   createMix,
+  TYPICAL_WIND,
   type AmbientMix,
 } from '../../domain/audio/mix';
+import { nightness, sunElevation } from '../../domain/world/environment';
 import { DISTANT_KINDS, type DistantKind, type ZoneId } from '../../domain/audio/zones';
 import { clamp, cos, sin, TAU } from '../../domain/math/dmath';
 import { Rng } from '../../domain/math/prng';
@@ -33,6 +35,7 @@ export interface SoundscapeOverrides {
   health: number | null;
   rain: number | null;
   night: number | null;
+  wind: number | null;
 }
 
 const PROBE_RANGE = 40;
@@ -52,6 +55,7 @@ export class SoundscapeDirector {
     health: null,
     rain: null,
     night: null,
+    wind: null,
   };
   acoustics: RoomAcoustics | null = null;
   distantPlayed = 0;
@@ -122,12 +126,18 @@ export class SoundscapeDirector {
     const o = this.overrides;
     const c = this.context;
     c.zones = o.zone !== null ? { [o.zone]: 1 } : zoneWeightsAt(this.layout, view.x, view.z);
+    const env = view.env;
+    // Scenes with a world clock take night from the sun; the fixed street keeps its slow ramp.
     c.night =
-      o.night ?? clamp(NIGHT_START + ((1 - NIGHT_START) * view.simTime) / NIGHT_RAMP_SECONDS, 0, 1);
+      o.night ??
+      (env.active
+        ? nightness(sunElevation(env.timeOfDay))
+        : clamp(NIGHT_START + ((1 - NIGHT_START) * view.simTime) / NIGHT_RAMP_SECONDS, 0, 1));
     c.danger = o.danger ?? 0;
     c.enemyProximity = o.enemyProximity ?? 0;
     c.health = o.health ?? 1;
-    c.rain = o.rain ?? 0;
+    c.rain = o.rain ?? (env.active ? env.weather.rain : 0);
+    c.wind = o.wind ?? (env.active ? env.weather.wind : TYPICAL_WIND);
     // Covered + enclosed reads as "indoors" (tunnel, interior); a street canyon is not.
     const a = this.acoustics;
     c.indoor = a === null ? 0 : clamp((a.enclosure - 0.5) * 2, 0, 1) * (a.covered ? 1 : 0.3);

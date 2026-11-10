@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { OsdState } from '../postfx/types';
-import { IN_WORLD_DATE, formatClock, formatTimecode } from './format';
+import { IN_WORLD_DATE, formatClock, formatTimeOfDay, formatTimecode } from './format';
 
 /**
  * Bodycam recorder overlay drawn with Canvas 2D (system monospace font, no
@@ -60,7 +60,11 @@ export class OsdCanvas {
     }
     g.fillText(tc, s.mode === 'play' ? 160 : 150, 38);
     g.textAlign = 'right';
-    g.fillText(`${IN_WORLD_DATE}  ${formatClock(s.simTime)}`, OSD_WIDTH - 40, 38);
+    g.fillText(
+      `${IN_WORLD_DATE}  ${s.clock === null ? formatClock(s.simTime) : formatTimeOfDay(s.clock)}`,
+      OSD_WIDTH - 40,
+      38,
+    );
     g.font = '500 20px ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace';
     g.fillText('WAR-BC03  UNIT 7', OSD_WIDTH - 40, 72);
     g.textAlign = 'left';

@@ -9,6 +9,8 @@ import type { SurfaceId } from '../../domain/world/surfaces';
  * operation is deterministic given the same call sequence.
  */
 export type CharacterId = Brand<number, 'CharacterId'>;
+/** A static collider, so streamed chunks can remove what they added. */
+export type ColliderId = Brand<number, 'ColliderId'>;
 
 export interface CharacterMove {
   dx: number;
@@ -41,15 +43,25 @@ export interface CharacterSpec {
 }
 
 export interface PhysicsPort {
-  addStaticBox(center: Vec3, size: Vec3, yaw: number, surface: SurfaceId | null): void;
+  addStaticBox(center: Vec3, size: Vec3, yaw: number, surface: SurfaceId | null): ColliderId;
   /** Vertical cylinder; `base` is the centre of its bottom face. */
-  addStaticCylinder(base: Vec3, height: number, radius: number, surface: SurfaceId | null): void;
+  addStaticCylinder(
+    base: Vec3,
+    height: number,
+    radius: number,
+    surface: SurfaceId | null,
+  ): ColliderId;
+  removeCollider(id: ColliderId): void;
+  /** Number of static colliders currently in the world. */
+  readonly staticColliderCount: number;
   createCharacter(spec: CharacterSpec): CharacterId;
   /** Resize the capsule keeping the feet planted. Returns false (and keeps the old size) if blocked. */
   setCharacterHeight(id: CharacterId, height: number): boolean;
   /** Collide-and-slide the character by the desired delta; writes what actually happened. */
   moveCharacter(id: CharacterId, dx: number, dy: number, dz: number, out: CharacterMove): void;
   characterFeet(id: CharacterId, out: Point): Point;
+  /** Teleport: place the character's feet at a point (velocity is the motor's business). */
+  setCharacterFeet(id: CharacterId, feet: Vec3): void;
   /** Surface directly under the character's feet, or null when nothing is there. */
   surfaceBelow(id: CharacterId): SurfaceId | null;
   /**

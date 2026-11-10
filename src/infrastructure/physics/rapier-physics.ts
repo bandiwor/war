@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-deterministic-compat';
 import type {
   CharacterId,
+  ColliderId,
   CharacterMove,
   CharacterSpec,
   PhysicsPort,
@@ -43,6 +44,7 @@ export class RapierPhysics implements PhysicsPort {
   private readonly surfaces = new Map<number, SurfaceId>();
   private readonly characters: Character[] = [];
   private dirty = true;
+  private staticCount = 0;
   private readonly ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
   private readonly probe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
   private readonly desired = { x: 0, y: 0, z: 0 };
@@ -62,21 +64,46 @@ export class RapierPhysics implements PhysicsPort {
     return p;
   }
 
-  addStaticBox(center: Vec3, size: Vec3, yaw: number, surface: SurfaceId | null): void {
+  addStaticBox(center: Vec3, size: Vec3, yaw: number, surface: SurfaceId | null): ColliderId {
     const half = yaw / 2;
     const desc = RAPIER.ColliderDesc.cuboid(size[0] / 2, size[1] / 2, size[2] / 2)
       .setTranslation(center[0], center[1], center[2])
       .setRotation({ x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) });
-    this.register(this.world.createCollider(desc), surface);
+    return this.register(this.world.createCollider(desc), surface);
   }
 
-  addStaticCylinder(base: Vec3, height: number, radius: number, surface: SurfaceId | null): void {
+  addStaticCylinder(
+    base: Vec3,
+    height: number,
+    radius: number,
+    surface: SurfaceId | null,
+  ): ColliderId {
     const desc = RAPIER.ColliderDesc.cylinder(height / 2, radius).setTranslation(
       base[0],
       base[1] + height / 2,
       base[2],
     );
-    this.register(this.world.createCollider(desc), surface);
+    return this.register(this.world.createCollider(desc), surface);
+  }
+
+  removeCollider(id: ColliderId): void {
+    // Typed non-null, but Rapier returns null for a stale handle.
+    const collider: unknown = this.world.getCollider(id);
+    if (!(collider instanceof RAPIER.Collider)) throw new Error(`Unknown collider ${String(id)}`);
+    this.world.removeCollider(collider, false);
+    this.surfaces.delete(id);
+    this.staticCount--;
+    this.dirty = true;
+  }
+
+  get staticColliderCount(): number {
+    return this.staticCount;
+  }
+
+  setCharacterFeet(id: CharacterId, feet: Vec3): void {
+    const c = this.character(id);
+    c.collider.setTranslation({ x: feet[0], y: feet[1] + SKIN + c.height / 2, z: feet[2] });
+    this.dirty = true;
   }
 
   createCharacter(spec: CharacterSpec): CharacterId {
@@ -232,9 +259,12 @@ export class RapierPhysics implements PhysicsPort {
     this.world.free();
   }
 
-  private register(collider: RAPIER.Collider, surface: SurfaceId | null): void {
+  private register(collider: RAPIER.Collider, surface: SurfaceId | null): ColliderId {
     if (surface !== null) this.surfaces.set(collider.handle, surface);
+    this.staticCount++;
     this.dirty = true;
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- brand constructor: Rapier collider handles are the ids
+    return collider.handle as ColliderId;
   }
 
   /** Scene queries need the broad phase updated after colliders are added. */

@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#000000" />
     <title>War</title>
     <style>
       html,
@@ -96,6 +102,117 @@
       .debug-menu fieldset {
         border: 1px solid #2a3036;
         margin: 0 0 8px;
+      }
+      /* Phone controls: stick on the left half, look pad on the right, buttons bottom-right. */
+      .touch-controls {
+        position: absolute;
+        inset: 0;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        --pad: max(12px, env(safe-area-inset-right));
+      }
+      .tc-stick-zone,
+      .tc-look-zone {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        touch-action: none;
+      }
+      .tc-stick-zone {
+        left: 0;
+        width: 45%;
+      }
+      .tc-look-zone {
+        right: 0;
+        width: 55%;
+      }
+      .tc-stick-base {
+        position: absolute;
+        left: max(90px, calc(env(safe-area-inset-left) + 90px));
+        top: calc(100% - 100px);
+        width: 112px;
+        height: 112px;
+        margin: -56px 0 0 -56px;
+        border-radius: 50%;
+        border: 2px solid rgba(200, 208, 216, 0.25);
+        background: rgba(200, 208, 216, 0.06);
+        pointer-events: none;
+      }
+      .tc-stick-base.active {
+        border-color: rgba(200, 208, 216, 0.5);
+      }
+      .tc-stick-knob {
+        position: absolute;
+        left: 32px;
+        top: 32px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(200, 208, 216, 0.35);
+      }
+      .tc-btn {
+        position: absolute;
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        border: 1px solid rgba(200, 208, 216, 0.35);
+        background: rgba(8, 10, 12, 0.35);
+        color: rgba(230, 233, 236, 0.85);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        touch-action: none;
+      }
+      .tc-btn.on {
+        background: rgba(200, 208, 216, 0.35);
+        color: #000;
+      }
+      .tc-fire {
+        right: calc(var(--pad) + 64px);
+        bottom: 28px;
+        width: 84px;
+        height: 84px;
+        font-size: 13px;
+        border-color: rgba(220, 120, 110, 0.6);
+      }
+      .tc-aim {
+        right: calc(var(--pad) + 160px);
+        bottom: 24px;
+      }
+      .tc-jump {
+        right: var(--pad);
+        bottom: 24px;
+      }
+      .tc-crouch {
+        right: var(--pad);
+        bottom: 88px;
+      }
+      .tc-reload {
+        right: calc(var(--pad) + 80px);
+        bottom: 124px;
+      }
+      .tc-sprint {
+        left: max(12px, env(safe-area-inset-left));
+        bottom: 190px;
+      }
+      .tc-weapon {
+        right: var(--pad);
+        top: 64px;
+      }
+      .tc-mode {
+        right: calc(var(--pad) + 62px);
+        top: 64px;
+      }
+      .tc-light {
+        right: calc(var(--pad) + 124px);
+        top: 64px;
+      }
+      .tc-use {
+        right: calc(var(--pad) + 144px);
+        bottom: 96px;
       }
     </style>
   </head>

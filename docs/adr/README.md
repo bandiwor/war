@@ -13,3 +13,4 @@ New ADRs get the next number; superseded ones stay, marked as superseded.
 | 0006 | [Physics, player controller, events, replays v2](0006-physics-player-replays.md) | Accepted |
 | 0007 | [Procedural audio engine and dynamic soundscape](0007-procedural-audio.md)       | Accepted |
 | 0008 | [Weapons, ballistics and combat](0008-weapons-ballistics-combat.md)              | Accepted |
+| 0009 | [Touch controls and GitHub Pages deployment](0009-touch-controls-and-pages.md)   | Accepted |

@@ -4,6 +4,9 @@ A realistic first-person survival shooter for the browser, shown as **chest-moun
 footage** at night. A semi-open world of hub zones, four hostile races (zombies, robots, plants,
 animals) and a story told through found logs, radio chatter and camera recordings.
 
+**Play it:** <https://bandiwor.github.io/war/> (desktop: click to capture the mouse; phones and
+tablets get on-screen controls, best in landscape).
+
 **Everything is generated in code**: no texture, model or sound files. The simulation is fully
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
@@ -44,6 +47,19 @@ Open the printed URL and click to capture the mouse.
 | Left Ctrl    | Crouch (hold; you stay down under low ceilings)                             |
 | F            | Flashlight on/off (drains the battery shown in the OSD)                     |
 | <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam                        |
+
+On a phone or tablet the game shows touch controls. It also starts at `?quality=low`.
+
+| Touch              | Action                                              |
+| ------------------ | --------------------------------------------------- |
+| Left half: drag    | Walk (a floating stick appears under your thumb)    |
+| Right half: drag   | Look (dragging from FIRE also aims while you shoot) |
+| FIRE               | Fire (hold)                                         |
+| AIM · DUCK · RUN   | Toggles: aim down sights, crouch, sprint            |
+| R · JUMP · USE     | Reload, jump, use                                   |
+| WPN · MODE · LIGHT | Next weapon, fire mode, flashlight                  |
+
+Use `?touch=1` to force the touch controls on (for example, to try them on a desktop) and `?touch=0` to force them off.
 
 Useful URL options (see `src/presentation/url-options.ts`): `?seed=N`, `?quality=low|medium|high`,
 `?fx=none|all|bloom,vignette`, and `?stim=damage:0.5,fear:0.3,emi:0.8` to preview the look reacting to

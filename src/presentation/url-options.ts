@@ -15,6 +15,8 @@ import { isQualityName, type QualityName } from '../infrastructure/render/qualit
  *   ?replay=session     play back the replay stored by the debug menu (Sim tab)
  *   ?scene=range        the debug shooting range instead of the street
  *   ?stim=damage:0.5,fear:0.2,emi:0
+ *   ?touch=1|0          force the on-screen phone controls on/off (default: on for touch screens,
+ *                       which also default to ?quality=low)
  */
 export interface UrlOptions {
   readonly seed: number;
@@ -30,6 +32,7 @@ export interface UrlOptions {
   readonly replay: 'session' | null;
   readonly scene: 'street' | 'range';
   readonly stimulus: BodycamStimulus | null;
+  readonly touch: boolean;
 }
 
 function num(v: string | null, fallback: number): number {
@@ -37,10 +40,12 @@ function num(v: string | null, fallback: number): number {
   return v === null || v === '' || !Number.isFinite(n) ? fallback : n;
 }
 
-export function parseUrlOptions(search: string): UrlOptions {
+export function parseUrlOptions(search: string, touchDevice = false): UrlOptions {
   const q = new URLSearchParams(search);
   const fxRaw = q.get('fx') ?? 'all';
-  const quality = q.get('quality') ?? 'medium';
+  const touchRaw = q.get('touch');
+  const touch = touchRaw === null ? touchDevice : touchRaw === '1';
+  const quality = q.get('quality') ?? (touch ? 'low' : 'medium');
   const vt = q.get('vt');
   const [yaw = 0, pitch = 0] = (q.get('look') ?? '').split(',').map((x) => num(x, 0));
   let stimulus: BodycamStimulus | null = null;
@@ -66,6 +71,7 @@ export function parseUrlOptions(search: string): UrlOptions {
     replay: q.get('replay') === 'session' ? 'session' : null,
     scene: q.get('scene') === 'range' ? 'range' : 'street',
     stimulus,
+    touch,
   };
 }
 

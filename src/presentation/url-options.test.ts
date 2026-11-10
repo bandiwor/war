@@ -17,6 +17,14 @@ describe('url options', () => {
     });
   });
 
+  it('touch screens get the phone controls and low quality unless the URL says otherwise', () => {
+    expect(parseUrlOptions('', true)).toMatchObject({ touch: true, quality: 'low' });
+    expect(parseUrlOptions('?quality=high', true)).toMatchObject({ touch: true, quality: 'high' });
+    expect(parseUrlOptions('?touch=0', true)).toMatchObject({ touch: false, quality: 'medium' });
+    expect(parseUrlOptions('?touch=1')).toMatchObject({ touch: true, quality: 'low' });
+    expect(parseUrlOptions('').touch).toBe(false);
+  });
+
   it('parses everything', () => {
     const o = parseUrlOptions(
       '?seed=42&quality=low&fx=bloom,vignette,nope&vt=3.5&ticks=90&look=0.5,-0.1&walk=1&signal=0.7&bench=15&stim=damage:0.5,emi:1,bogus:3',

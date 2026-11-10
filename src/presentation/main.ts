@@ -15,6 +15,7 @@ import { AudioEngine } from '../infrastructure/audio/audio-engine';
 import { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 import { WeaponAudio } from '../infrastructure/audio/weapon-audio';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
+import { TouchInput } from '../infrastructure/browser/touch-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
 import { createRapierPhysics } from '../infrastructure/physics/rapier-physics';
 import { BodycamPresenter } from '../infrastructure/render/bodycam-presenter';
@@ -23,13 +24,14 @@ import type { EffectFactories } from '../infrastructure/render/postfx/types';
 import { QUALITY_PRESETS } from '../infrastructure/render/quality';
 import { createTextureBaker } from '../infrastructure/render/textures/texture-baker';
 import { loadSessionReplay, type GameSession } from './session';
+import { isTouchDevice, mountTouchControls } from './touch-controls';
 import { applyFxSelection, parseUrlOptions, unknownEffects } from './url-options';
 
 /** Browser composition root: the only place concrete adapters are wired together. */
 async function bootstrap(): Promise<void> {
   const root = document.getElementById('app');
   if (root === null) throw new Error('#app missing');
-  const opts = parseUrlOptions(window.location.search);
+  const opts = parseUrlOptions(window.location.search, isTouchDevice());
   for (const id of unknownEffects(opts.fx)) console.warn(`Unknown effect in ?fx: ${id}`);
 
   const status = document.createElement('div');
@@ -113,12 +115,21 @@ async function bootstrap(): Promise<void> {
     }, opts.benchSeconds * 1000);
   } else {
     const keyboard = new KeyboardMouseInput(canvas);
-    canvas.addEventListener('click', () => {
-      void canvas.requestPointerLock();
-    });
+    let device: InputSource = keyboard;
+    if (opts.touch) {
+      // Phones: on-screen stick, look pad and buttons, layered over the keyboard (tablets with keyboards).
+      const touch = new TouchInput(keyboard);
+      mountTouchControls(root, touch);
+      root.dataset['touch'] = '1';
+      device = touch;
+    } else {
+      canvas.addEventListener('click', () => {
+        void canvas.requestPointerLock();
+      });
+    }
     // Black box: every live session records its input from tick 0.
     // Debug tools inject through the queue, before recording: injected commands are replayable.
-    commands = new CommandQueue(keyboard);
+    commands = new CommandQueue(device);
     const recording = new RecordingInput(commands);
     recorder = new ReplayRecorder(
       kind === 'range' ? 'range' : 'sandbox',

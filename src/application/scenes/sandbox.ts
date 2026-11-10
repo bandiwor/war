@@ -28,6 +28,7 @@ import { generateWorldLayout } from '../../domain/world/world-layout';
 import { ChunkColliders } from '../world/chunk-colliders';
 import { Mob, PlayerVitals } from '../ai/components';
 import { AiRuntime } from '../ai/runtime';
+import { senseWorldSystem } from '../ai/world-senses';
 import {
   addVitals,
   attackSystem,
@@ -441,15 +442,20 @@ export function createSandbox(
   buildStaticColliders(layout, physics);
   const ai = new AiRuntime();
   // Fixed scenes rasterise their layout once; the world's nav grid follows collider streaming.
-  if (kind !== 'world') ai.nav.rasterize(layout);
+  if (kind !== 'world') {
+    ai.nav.rasterize(layout);
+    ai.lights.addLights(layout.lights);
+  }
   const chunks =
     kind === 'world'
       ? new ChunkColliders(seed, physics, {
           loaded: (c) => {
             ai.nav.rasterize(c, [c.cx, c.cz]);
+            ai.lights.addLights(c.lights);
           },
           unloaded: (cx, cz) => {
             ai.nav.removeTile(cx, cz);
+            ai.lights.removeChunk(cx, cz);
           },
         })
       : null;
@@ -513,9 +519,12 @@ export function createSandbox(
     out.y = at(pf.y, r);
     out.z = at(pf.z, r);
     out.eyeY = at(pf.y, r) + at(pf.eye, r);
+    out.yaw = at(pf.yaw, r);
+    out.speed = at(pf.speed, r);
     const fl = w.store(Flashlight);
     const fr = fl.rowOf(player);
     out.flashlight = fr >= 0 && fl.fields.on[fr] === 1;
+    out.battery = fr >= 0 ? at(fl.fields.battery, fr) : 0;
     const v = w.store(PlayerVitals);
     const vr = v.rowOf(player);
     out.alive = vr < 0 || at(v.fields.down, vr) <= 0;
@@ -533,6 +542,7 @@ export function createSandbox(
     pf.z[r] = pf.prevZ[r] = z;
   };
   const aiSystems: System<SimContext>[] = [
+    senseWorldSystem(ai, probe, player),
     perceptionSystem(ai, probe, physics),
     decisionSystem(ai, probe),
     movementSystem(ai, probe),
@@ -596,6 +606,9 @@ export function createSandbox(
     hashExtras: [
       (h) => {
         physics.hashInto(h);
+      },
+      (h) => {
+        ai.pheromone.hashInto(h);
       },
     ],
   });

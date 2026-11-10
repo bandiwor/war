@@ -22,9 +22,19 @@ describe('mob registry', () => {
   it('every mob can be perceived somehow and has the animations its AI uses', () => {
     for (const id of MOB_IDS) {
       const m = MOBS[id];
+      const senses = m.senses;
       expect(
-        m.senses.sight !== null || m.senses.hearing !== null || m.senses.proximity !== null,
+        senses.sight !== null ||
+          senses.hearing !== null ||
+          senses.proximity !== null ||
+          senses.pheromone !== null,
+        id,
       ).toBe(true);
+      // Zombies have no eyes or ears: they follow the pheromone field only.
+      if (m.race === 'zombie')
+        expect([senses.sight, senses.hearing, senses.proximity, senses.pheromone !== null]).toEqual(
+          [null, null, null, true],
+        );
       expect(m.animations).toContain('idle');
       if (m.body.runSpeed > 0)
         expect(m.animations).toEqual(expect.arrayContaining(['walk', 'run']));

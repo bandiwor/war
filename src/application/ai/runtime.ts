@@ -1,6 +1,8 @@
 import type { EntityId } from '../../domain/ecs/entity';
 import { PathFinder, type PathResult } from '../../domain/nav/astar';
 import { NavGrid } from '../../domain/nav/nav-grid';
+import { PheromoneField } from '../../domain/ai/pheromone';
+import { LightMap } from './light-map';
 
 /** Per-mob path (side table: derived, recomputable state, see ADR-0011). */
 export interface MobPath {
@@ -108,6 +110,11 @@ function bucket(cx: number, cz: number): number {
 /** AI services shared by the systems of one scene. */
 export class AiRuntime {
   readonly nav = new NavGrid(0.35);
+  /** Zombies' scent world (simulation state: part of the hash). */
+  readonly pheromone = new PheromoneField();
+  /** Whether any pheromone-led mob is near enough for the field to run. */
+  pheromoneActive = false;
+  readonly lights = new LightMap();
   readonly finder = new PathFinder(96);
   readonly paths = new Map<number, MobPath>();
   readonly hash = new SpatialHash();

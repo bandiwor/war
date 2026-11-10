@@ -16,6 +16,8 @@ export const UTILITY_ACTIONS = [
   'search',
   'flee',
   'home',
+  // Appended in stage 7 (the score columns follow this order).
+  'warn',
 ] as const;
 export type UtilityAction = (typeof UTILITY_ACTIONS)[number];
 export const ACTION_COUNT = UTILITY_ACTIONS.length;
@@ -43,6 +45,13 @@ export interface UtilityInputs {
   /** Distance from its spawn point / allowed roam radius. */
   homeDistance: number;
   roam: number;
+  /** 0..1 fear from wounds, a lost pack or a fright (animals). */
+  fear: number;
+  /** 0..1 light on the mob × how much it fears light (zombies panic in the beam). */
+  light: number;
+  /** Territory radius (0 = none) and how far the target is from the mob's home. */
+  territory: number;
+  targetFromHome: number;
 }
 
 export function createUtilityInputs(): UtilityInputs {
@@ -60,11 +69,19 @@ export function createUtilityInputs(): UtilityInputs {
     searchLeft: 0,
     homeDistance: 0,
     roam: 0,
+    fear: 0,
+    light: 0,
+    territory: 0,
+    targetFromHome: Infinity,
   };
 }
 
-/** Bonus for the current action: a switch needs a clear win (no dithering). */
-export const INERTIA = 0.08;
+/**
+ * Inertia for the current action: a switch needs a clear win (no dithering).
+ * Mostly proportional, so it does not pin low-weighted actions in place.
+ */
+export const INERTIA = 0.02;
+export const INERTIA_GAIN = 1.15;
 
 function ramp(x: number, lo: number, hi: number): number {
   return clamp((x - lo) / (hi - lo), 0, 1);
@@ -80,11 +97,22 @@ export function scoreActions(i: UtilityInputs, out: Float64Array): Float64Array 
   out[0] = 0.25; // idle: the floor everything else must beat
   out[1] = move * calm * (i.roam > 0 ? 0.35 : 0); // wander
   out[2] = move * (i.hasLastKnown && !i.sensing && i.searchLeft <= 0 ? 0.3 + 0.6 * threat : 0); // investigate
-  out[3] = move * (i.sensing ? 0.5 + 0.5 * i.aggression : 0) * (1 - inReach * 0.8); // chase
-  out[4] = threat > 0.5 ? inReach * i.aggression * (i.attackReady ? 1 : 0.6) : 0; // attack
+  // chase: how aggressive it is decides whether it goes after what it senses
+  out[3] = move * (i.sensing ? i.aggression : 0) * (1 - inReach * 0.8);
+  // attack: only what it senses right now (a remembered position is not something to bite)
+  out[4] = i.sensing && threat > 0.5 ? inReach * i.aggression * (i.attackReady ? 1 : 0.6) : 0;
   out[5] = move * (i.hasLastKnown && !i.sensing && i.searchLeft > 0 ? 0.75 : 0); // search
-  out[6] = move * hurt * threat * 1.3; // flee: survival beats the hunt
+  // flee: wounds, fear and light; light panics even without a target in mind
+  const fear = clamp(i.fear, 0, 1);
+  const lit = clamp(i.light, 0, 1);
+  out[6] = move * Math.max(hurt * threat * 1.3, fear * threat * 1.2, lit * lit * 1.5);
   out[7] = move * calm * ramp(i.homeDistance, i.roam, i.roam * 1.5 + 1) * 0.6; // home
+  // warn: a target near the edge of its territory, or one it senses but has no stomach for
+  const edge =
+    i.territory > 0 && i.targetFromHome > i.territory && i.targetFromHome < i.territory * 1.8
+      ? 0.85
+      : 0;
+  out[8] = threat * Math.max(edge, i.sensing ? 0.5 * (1 - i.aggression) : 0);
   return out;
 }
 
@@ -97,7 +125,8 @@ export function pickAction(
   let best = 0;
   let bestScore = -Infinity;
   for (let a = 0; a < ACTION_COUNT; a++) {
-    const s = (scores[a] ?? 0) * (weights[a] ?? 0) + (a === current ? INERTIA : 0);
+    const raw = (scores[a] ?? 0) * (weights[a] ?? 0);
+    const s = a === current ? raw * INERTIA_GAIN + INERTIA : raw;
     if (s > bestScore) {
       bestScore = s;
       best = a;

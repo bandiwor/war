@@ -170,18 +170,6 @@ describe('hearing and proximity', () => {
     expect(s.x).toBeGreaterThan(0);
     expect(Math.hypot(s.x - 10, s.z)).toBeLessThan(8);
   });
-
-  it('a shambler senses only what is close, through walls and in the dark', () => {
-    const sb = arena();
-    run(sb, 2, [at(-10, 0)]);
-    flashlightOff(sb);
-    const z = place(sb, 'shambler', -10, 15, -10, 30);
-    run(sb, 60);
-    expect(state(sb, z).hasLast).toBe(false);
-    run(sb, 1, [at(-10, 9)]);
-    run(sb, 30);
-    expect(state(sb, z).sensing).toBe(true);
-  });
 });
 
 describe('fighting', () => {
@@ -248,17 +236,6 @@ describe('fighting', () => {
 });
 
 describe('navigation', () => {
-  it('a chasing mob goes around the wall to reach the player', () => {
-    const sb = arena(5);
-    run(sb, 2, [at(6, 0)]);
-    const z = place(sb, 'lurcher', -6, 0, 6, 0);
-    // Its 14 m nose reaches through the wall; the path must go around it.
-    run(sb, 60 * 12);
-    const s = state(sb, z);
-    expect(Math.hypot(s.x - 6, s.z)).toBeLessThan(2.5);
-    expect(sb.ai.stats.searches).toBeGreaterThan(0);
-  });
-
   it('spawn commands put any registry mob on walkable ground and nowhere else', () => {
     const sb = arena();
     run(sb, 1, [

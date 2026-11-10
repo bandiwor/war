@@ -2,6 +2,7 @@ import { type ComponentStore } from '../../domain/ecs/component';
 import type { EntityId } from '../../domain/ecs/entity';
 import type { System } from '../../domain/ecs/schedule';
 import type { World } from '../../domain/ecs/world';
+import { ALARM, PREY } from '../../domain/ai/pheromone';
 import {
   hearingStrength,
   NOISE,
@@ -58,12 +59,32 @@ export interface PlayerState {
   y: number;
   z: number;
   eyeY: number;
+  /** View yaw (the flashlight points along it). */
+  yaw: number;
   flashlight: boolean;
+  /** Flashlight battery 0..1 (beam strength). */
+  battery: number;
+  /** Horizontal speed (m/s): running leaves a stronger scent. */
+  speed: number;
   /** False while down (dead, waiting to respawn): mobs lose interest. */
   alive: boolean;
 }
 
 export type PlayerProbe = (world: World, out: PlayerState) => boolean;
+
+export function newPlayerState(): PlayerState {
+  return {
+    x: 0,
+    y: 0,
+    z: 0,
+    eyeY: 0,
+    yaw: 0,
+    flashlight: false,
+    battery: 1,
+    speed: 0,
+    alive: true,
+  };
+}
 
 const IDLE = actionIndex('idle');
 const WANDER = actionIndex('wander');
@@ -170,8 +191,12 @@ export function despawnMob(world: World, ai: AiRuntime, e: EntityId): void {
   ai.stats.despawned++;
 }
 
+/** How strongly the zombies' alarm channel registers compared with prey scent. */
+const ALARM_WEIGHT = 1;
+
 interface PerceptionScratch {
   rays: number;
+  readonly trail: { x: number; z: number };
   readonly origin: Point;
   readonly dir: Point;
   readonly hit: RayHit;
@@ -243,15 +268,46 @@ function perceiveMob(
     }
   }
   alert = Math.max(alert, strength * 0.9);
+  // Light on the mob (lamps, sky, flares, the flashlight's beam): every other tick is plenty.
+  if (((ctx.tick + row) & 1) === 0) f.light[row] = ai.lights.at(mx, mz);
+  // Where its senses put the target: the player, or for a zombie the next step up the scent trail.
+  let tx = p.x;
+  let tz = p.z;
+  const nose = spec.senses.pheromone;
   // Sight and proximity: time-sliced.
   const period = dist < AI_BUDGET.nearLod ? 4 : 16;
   const due = (ctx.tick + row) % period === 0;
   let sensed = (f.sensing[row] ?? 0) === 1 && !due;
   if (due && p.alive) {
     sensed = false;
-    const nose = spec.senses.proximity;
-    if (nose !== null) {
-      const s = proximityStrength(nose, dist);
+    if (nose !== null && ai.pheromoneActive) {
+      // Zombies: no eyes, no ears. Prey scent first: a zombie on a trail follows the trail
+      // (and ignores alarm, including its own). With no prey in its nose, alarm draws it
+      // toward the zombies that have some: that is how they recruit each other.
+      const prey = ai.pheromone.at(PREY, mx, mz);
+      const alarm = ai.pheromone.at(ALARM, mx, mz);
+      const onTrail = prey >= nose.threshold;
+      const smell = onTrail ? prey : alarm * ALARM_WEIGHT;
+      if (smell >= nose.threshold) {
+        strength = Math.max(strength, Math.min(1, smell / (nose.threshold * 6)));
+        const climbed = onTrail
+          ? ai.pheromone.uphill(mx, mz, 0, work.trail, 1)
+          : ai.pheromone.uphill(mx, mz, 1, work.trail, 0);
+        if (dist < 2.5) {
+          sensed = true; // close enough to touch: the prey itself
+        } else if (climbed > 0) {
+          tx = work.trail.x;
+          tz = work.trail.z;
+          sensed = onTrail && prey >= nose.threshold * 3;
+        } else {
+          tx = f.lastX[row] ?? mx;
+          tz = f.lastZ[row] ?? mz;
+        }
+      }
+    }
+    const proximity = spec.senses.proximity;
+    if (proximity !== null) {
+      const s = proximityStrength(proximity, dist);
       if (s > 0) {
         sensed = true;
         strength = Math.max(strength, s);
@@ -289,10 +345,15 @@ function perceiveMob(
   }
   if (!p.alive) sensed = false;
   f.sensing[row] = sensed ? 1 : 0;
+  if (nose !== null && strength > 0 && !due) {
+    // Between smells a zombie keeps following the trail point it last found.
+    tx = f.lastX[row] ?? tx;
+    tz = f.lastZ[row] ?? tz;
+  }
   if (strength > 0) {
     f.hasLast[row] = 1;
-    f.lastX[row] = p.x;
-    f.lastZ[row] = p.z;
+    f.lastX[row] = tx;
+    f.lastZ[row] = tz;
     f.sinceSensed[row] = 0;
     f.searchLeft[row] = 0;
   } else {
@@ -315,11 +376,12 @@ export function perceptionSystem(
   player: PlayerProbe,
   physics: PhysicsPort,
 ): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   const weather = createWeather();
   const senses: Senses = { light: 0, sight: 1, hearing: 1, night: 1 };
   const work: PerceptionScratch = {
     rays: 0,
+    trail: { x: 0, z: 0 },
     origin: { x: 0, y: 0, z: 0 },
     dir: { x: 0, y: 0, z: 0 },
     hit: { distance: 0, surface: null, nx: 0, ny: 0, nz: 0 },
@@ -410,13 +472,15 @@ function decideMob(
   const due = (ctx.tick + row * 3) % period === 0;
   const urgent =
     (sensing && current !== CHASE && current !== ATTACK && current !== FLEE) ||
+    ((f.light[row] ?? 0) * spec.temperament.lightFear > 0.5 && current !== FLEE) ||
     (f.hitTime[row] ?? 0) === ctx.dt;
   if (!due && !urgent && current !== DEAD_ACTION) return;
 
   inputs.awareness = f.awareness[row] ?? 0;
   inputs.sensing = sensing;
   inputs.hasLastKnown = (f.hasLast[row] ?? 0) === 1;
-  inputs.distance = sensing || inputs.hasLastKnown ? dist : Infinity;
+  // Sensing: reach is measured to the target itself (a zombie's trail point is not what it bites).
+  inputs.distance = sensing ? toPlayer : inputs.hasLastKnown ? dist : Infinity;
   inputs.attackRange = spec.attack.range * Math.max(1, spec.body.scale);
   inputs.attackReady = (f.attackCooldown[row] ?? 0) <= 0;
   inputs.mobile = spec.body.runSpeed > 0;
@@ -428,6 +492,16 @@ function decideMob(
   const hz = (f.homeZ[row] ?? 0) - mz;
   inputs.homeDistance = Math.sqrt(hx * hx + hz * hz);
   inputs.roam = spec.temperament.roam;
+  inputs.light = (f.light[row] ?? 0) * spec.temperament.lightFear;
+  inputs.fear = f.fear[row] ?? 0;
+  inputs.territory = spec.temperament.territory;
+  inputs.targetFromHome =
+    sensing || inputs.hasLastKnown
+      ? Math.sqrt(
+          ((f.homeX[row] ?? 0) - tx) * ((f.homeX[row] ?? 0) - tx) +
+            ((f.homeZ[row] ?? 0) - tz) * ((f.homeZ[row] ?? 0) - tz),
+        )
+      : Infinity;
   scoreActions(inputs, scores);
   utilityWeights(spec, weights);
   for (let a = 0; a < ACTION_COUNT; a++) {
@@ -461,6 +535,20 @@ function decideMob(
     }
   } else if (action === HOME) {
     setGoal(f, row, f.homeX[row] ?? 0, f.homeZ[row] ?? 0);
+  } else if (action === FLEE && inputs.light > 0.3) {
+    // Fleeing the light: the darkest walkable spot a few metres away.
+    let best = Infinity;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU;
+      const gx = mx + sin(a) * 6;
+      const gz = mz + cos(a) * 6;
+      if (!ai.nav.walkableAt(gx, gz)) continue;
+      const lit = ai.lights.at(gx, gz);
+      if (lit < best) {
+        best = lit;
+        setGoal(f, row, gx, gz);
+      }
+    }
   } else if (action === FLEE) {
     const away = atan2(mx - p.x, mz - p.z);
     for (let k = 0; k < 5; k++) {
@@ -477,7 +565,7 @@ function decideMob(
 
 /** Utility decisions: every 10 ticks near the player (30 far), at once when something changes. */
 export function decisionSystem(ai: AiRuntime, player: PlayerProbe): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   const work: DecisionScratch = {
     inputs: createUtilityInputs(),
     scores: new Float64Array(ACTION_COUNT),
@@ -554,8 +642,10 @@ function moveMob(
   let gz = 0;
   let face = false;
   if (action === CHASE) {
-    gx = p.x;
-    gz = p.z;
+    // Zombies follow the scent trail, not the player they cannot see.
+    const close = ddx * ddx + ddz * ddz < 4;
+    gx = spec.senses.pheromone !== null && !close ? (f.lastX[row] ?? p.x) : p.x;
+    gz = spec.senses.pheromone !== null && !close ? (f.lastZ[row] ?? p.z) : p.z;
     speed = spec.body.runSpeed;
   } else if (action === INVESTIGATE) {
     gx = f.lastX[row] ?? 0;
@@ -657,11 +747,15 @@ function moveMob(
   const nz = mz + vz * ctx.dt;
   let fx = mx;
   let fz = mz;
-  if (ai.nav.walkableAt(nx, nz)) {
+  // Light-shy mobs treat brighter, lit ground like a wall (they stop at the edge of a lamp's pool).
+  const fear = spec.temperament.lightFear;
+  const here = fear > 0.5 ? ai.lights.at(mx, mz) * fear : 0;
+  const fleeing = action === FLEE;
+  if (stepOk(ai, nx, nz, fear, here, fleeing)) {
     fx = nx;
     fz = nz;
-  } else if (ai.nav.walkableAt(nx, mz)) fx = nx;
-  else if (ai.nav.walkableAt(mx, nz)) fz = nz;
+  } else if (stepOk(ai, nx, mz, fear, here, fleeing)) fx = nx;
+  else if (stepOk(ai, mx, nz, fear, here, fleeing)) fz = nz;
   if (fx === mx && fz === mz) return;
   tf.x[tr] = fx;
   tf.z[tr] = fz;
@@ -675,7 +769,7 @@ function moveMob(
  * sliding, floor height. Chase and investigate track the target directly.
  */
 export function movementSystem(ai: AiRuntime, player: PlayerProbe): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   const work = { budget: 0 };
   return {
     name: 'ai.move',
@@ -698,6 +792,21 @@ export function movementSystem(ai: AiRuntime, player: PlayerProbe): System<SimCo
       for (let row = 0; row < mob.size; row++) moveMob(ctx, ai, mob, t, row, p, work);
     },
   };
+}
+
+/** A step onto (x, z) is allowed: walkable, and for light-shy mobs not into brighter, lit ground. */
+function stepOk(
+  ai: AiRuntime,
+  x: number,
+  z: number,
+  fear: number,
+  here: number,
+  fleeing: boolean,
+): boolean {
+  if (!ai.nav.walkableAt(x, z)) return false;
+  if (fear <= 0.5 || fleeing) return true;
+  const lit = ai.lights.at(x, z) * fear;
+  return !(lit > 0.5 && lit > here);
 }
 
 /** Runs one A* search into `path`; returns the expansions spent. */
@@ -743,7 +852,7 @@ export function attackSystem(
   player: PlayerProbe,
   playerEntity: EntityId,
 ): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   return {
     name: 'ai.attack',
     after: ['ai.move'],
@@ -797,7 +906,7 @@ export function vitalsSystem(
   player: PlayerProbe,
   respawn: (ctx: SimContext) => void,
 ): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   return {
     name: 'player.vitals',
     after: ['ai.attack'],
@@ -873,7 +982,7 @@ export function spawnerSystem(
   player: PlayerProbe,
   options: SpawnerOptions,
 ): System<SimContext> {
-  const p: PlayerState = { x: 0, y: 0, z: 0, eyeY: 0, flashlight: false, alive: true };
+  const p: PlayerState = newPlayerState();
   const doomed: EntityId[] = [];
   const candidates: MobId[] = [];
   const weights: number[] = [];

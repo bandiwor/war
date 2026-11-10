@@ -48,9 +48,38 @@ export const Mob = defineComponent('Mob', {
   s5: 'f32',
   s6: 'f32',
   s7: 'f32',
+  s8: 'f32',
+  // --- Stage 7: race state ---------------------------------------------------
+  /** Light on the mob 0..1 (lamps, sky, the flashlight's beam). */
+  light: 'f32',
+  /** Animals: hunger and fear 0..1. */
+  hunger: 'f32',
+  fear: 'f32',
+  /** Spawn group: packmates share it (0 = none). */
+  pack: 'u32',
+  /** Packmates within reach (courage). */
+  packmates: 'u8',
+  /** Robots: seconds of camera blindness left (flashlight in the lens). */
+  blind: 'f32',
+  /** Robots: the last sighting came over the network rather than its own camera. */
+  informed: 'u8',
+  /** Robots: reinforcements already called. */
+  called: 'u8',
+  /** Ranged attack cooldown (s). */
+  rangedCooldown: 'f32',
+  /** Leap in flight: seconds since take-off (−1 = not leaping) and landing point. */
+  leap: 'f32',
+  leapX: 'f64',
+  leapZ: 'f64',
+  /** Creepers: clinging to the player. */
+  attached: 'u8',
+  /** Seconds stunned (thrown off, blinded hard). */
+  stun: 'f32',
+  /** Robots: recent hits, for retreating under fire. */
+  underFire: 'f32',
 });
 
-export const SCORE_FIELDS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7'] as const;
+export const SCORE_FIELDS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'] as const;
 export const DEAD_ACTION = 255;
 
 /** The player's body as mobs see it: health, debug cheats, and what threatens them. */
@@ -66,6 +95,13 @@ export const PlayerVitals = defineComponent('PlayerVitals', {
   deaths: 'u16',
   god: 'u8',
   noclip: 'u8',
+  /** Robots' radio interference at the player 0..1 (disturbs the bodycam). */
+  emi: 'f64',
+  /** Creepers clinging on, and how hard the player has struggled to tear them off. */
+  clinging: 'u8',
+  struggle: 'f64',
+  lastYaw: 'f64',
+  lastPitch: 'f64',
 });
 
 export const PLAYER_MAX_HEALTH = 100;

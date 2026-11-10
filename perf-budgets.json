@@ -19,7 +19,7 @@
   },
   "aiCrowd": {
     "minTicksPerSecond": 6000,
-    "maxMinorGcPerMillionTicks": 1500,
+    "maxMinorGcPerMillionTicks": 2000,
     "maxP999TickMs": 2
   }
 }

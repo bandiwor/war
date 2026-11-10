@@ -77,3 +77,32 @@ test('danger brings in the heartbeat; distant events play', async ({ page }) => 
   await expect.poll(async () => (await audio(page))?.distantPlayed ?? 0).toBeGreaterThan(before);
   await expect(menu).toContainText('RT60');
 });
+
+test('Firefox-style audio listener (no position AudioParams) does not break the game', async ({
+  page,
+}) => {
+  // Firefox's AudioListener has only setPosition/setOrientation: emulate it in Chromium.
+  await page.addInitScript(() => {
+    for (const k of [
+      'positionX',
+      'positionY',
+      'positionZ',
+      'forwardX',
+      'forwardY',
+      'forwardZ',
+      'upX',
+      'upY',
+      'upZ',
+    ]) {
+      Reflect.deleteProperty(AudioListener.prototype, k);
+    }
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await boot(page);
+  expect(await page.evaluate(() => 'positionX' in AudioListener.prototype)).toBe(false);
+  const tick = Number(await page.locator('#app').getAttribute('data-tick'));
+  await page.waitForTimeout(1500);
+  expect(Number(await page.locator('#app').getAttribute('data-tick'))).toBeGreaterThan(tick);
+  expect(errors).toEqual([]);
+});

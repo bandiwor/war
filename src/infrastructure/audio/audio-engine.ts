@@ -149,17 +149,7 @@ export class AudioEngine implements AudioPort {
     p.y = y;
     p.z = z;
     p.yaw = yaw;
-    const l = this.context.listener;
-    const t = this.context.currentTime;
-    l.positionX.setValueAtTime(x, t);
-    l.positionY.setValueAtTime(y, t);
-    l.positionZ.setValueAtTime(z, t);
-    l.forwardX.setValueAtTime(-Math.sin(yaw), t);
-    l.forwardY.setValueAtTime(0, t);
-    l.forwardZ.setValueAtTime(-Math.cos(yaw), t);
-    l.upX.setValueAtTime(0, t);
-    l.upY.setValueAtTime(1, t);
-    l.upZ.setValueAtTime(0, t);
+    placeListener(this.context.listener, this.context.currentTime, x, y, z, yaw);
   }
 
   setMix(mix: AmbientMix): void {
@@ -286,4 +276,39 @@ export class AudioEngine implements AudioPort {
   dispose(): void {
     void this.context.close();
   }
+}
+
+/**
+ * Moves the Web Audio listener. Chrome and Safari expose position and
+ * orientation as AudioParams; Firefox still only has the older
+ * setPosition/setOrientation methods (`listener.positionX` is undefined there),
+ * so feature-detect and fall back.
+ */
+export function placeListener(
+  l: AudioListener,
+  t: number,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+): void {
+  const fx = -Math.sin(yaw);
+  const fz = -Math.cos(yaw);
+  const param: unknown = Reflect.get(l, 'positionX');
+  if (typeof AudioParam !== 'undefined' && param instanceof AudioParam) {
+    l.positionX.setValueAtTime(x, t);
+    l.positionY.setValueAtTime(y, t);
+    l.positionZ.setValueAtTime(z, t);
+    l.forwardX.setValueAtTime(fx, t);
+    l.forwardY.setValueAtTime(0, t);
+    l.forwardZ.setValueAtTime(fz, t);
+    l.upX.setValueAtTime(0, t);
+    l.upY.setValueAtTime(1, t);
+    l.upZ.setValueAtTime(0, t);
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Firefox has no listener AudioParams; these methods are its only API
+  l.setPosition(x, y, z);
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- as above
+  l.setOrientation(fx, 0, fz, 0, 1, 0);
 }

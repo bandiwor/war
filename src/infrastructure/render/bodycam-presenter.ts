@@ -190,6 +190,19 @@ export class BodycamPresenter implements Presenter {
     return presenter;
   }
 
+  /**
+   * Compiles a scene's shaders: in parallel where the browser has
+   * KHR_parallel_shader_compile (Chrome), synchronously where it does not
+   * (Firefox), instead of letting Three.js warn and fall back.
+   */
+  private async compile(scene: THREE.Object3D): Promise<void> {
+    if (this.renderer.extensions.has('KHR_parallel_shader_compile')) {
+      await this.renderer.compileAsync(scene, this.camera);
+    } else {
+      this.renderer.compile(scene, this.camera);
+    }
+  }
+
   /** Compile every scene and post shader before the first visible frame (no hitches later). */
   private async warmUp(): Promise<void> {
     readRenderView(this.options.sandbox, 1, this.view);
@@ -208,11 +221,11 @@ export class BodycamPresenter implements Presenter {
     const mobWarmup = this.mobs.warmupModels();
     mobWarmup.position.set(0, -1000, 0);
     this.sceneRig.scene.add(mobWarmup);
-    await this.renderer.compileAsync(this.sceneRig.scene, this.camera);
+    await this.compile(this.sceneRig.scene);
     this.sceneRig.scene.remove(mobWarmup);
     this.mobs.releaseWarmup(mobWarmup);
     if (extra !== null) this.sceneRig.scene.remove(extra);
-    await this.renderer.compileAsync(this.viewmodel.scene, this.camera);
+    await this.compile(this.viewmodel.scene);
     this.combatFx.setWarmup(false);
     const saved = clonePostFx(this.postFx);
     for (const s of Object.values(this.postFx)) s.enabled = true;

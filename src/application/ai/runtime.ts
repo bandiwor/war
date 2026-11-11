@@ -119,6 +119,8 @@ export class AiRuntime {
   readonly paths = new Map<number, MobPath>();
   readonly hash = new SpatialHash();
   readonly pathResult: PathResult = { status: 'failed', points: 0, expansions: 0 };
+  /** Patrol paths of the level being played: x, z pairs, and whether each loops. */
+  patrols: readonly { readonly points: Float64Array; readonly loop: boolean }[] = [];
   /** Counters for the debug view and tests. */
   readonly stats = { searches: 0, expansions: 0, rays: 0, spawned: 0, despawned: 0, attacks: 0 };
 

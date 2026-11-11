@@ -4,3 +4,5 @@ playwright-report
 test-results
 package-lock.json
 tests/golden
+# Levels are written by the editor in their own canonical form (serializeLevel), checked by npm run level:check.
+levels/

@@ -11,7 +11,15 @@ tablets get on-screen controls, best in landscape).
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 8, the story.** You are KESTREL-2, the last of a recovery team sent into the
+> Status: **stage 9, the level editor.** Built into the game (`?editor=1` or F4). It runs on the
+> same engine, registries and serialisation as the game. You place objects, mobs, lights, story
+> objects, spawn zones and patrol paths, and shape the ground with terrain and decor brushes,
+> with undo/redo and grid snapping. Levels are versioned, diff-friendly JSON with migrations,
+> and "play from here" drops you into the real bodycam game on the level. Automatic checks,
+> using the game's own nav grid, run live and in CI: reachability, stuck spawns and mobs,
+> patrol paths, spawn zones, story references and budgets.
+> Guide: [docs/guides/adding-a-level.md](docs/guides/adding-a-level.md).
+> Previously: **stage 8, the story.** You are KESTREL-2, the last of a recovery team sent into the
 > Varn quarantine zone. The campaign runs five chapters across the five hubs and ends in one of
 > three endings. It is told over the radio (subtitled, with a synthesised radio voice), in found
 > notes, audio logs and other people's bodycam recordings, and kept in a journal (J). The story
@@ -76,6 +84,7 @@ Open the printed URL and click to capture the mouse.
 | F            | Flashlight on/off (drains the battery shown in the OSD)                                         |
 | E            | Use (take a log, start a generator, access a terminal) when the prompt shows                    |
 | J            | Journal: chapter, tasks, every log found                                                        |
+| F4           | Switch between the game and the level editor                                                    |
 | F5 / F9      | Quicksave / quickload (autosave at each new chapter; `?load=quick` or `?load=auto`)             |
 | <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam · Range · World · Story · Bestiary · Audio |
 

@@ -19,3 +19,4 @@ New ADRs get the next number; superseded ones stay, marked as superseded.
 | 0012 | [Build toolchain: Rolldown, Oxc, Lightning CSS; no release source maps](0012-build-toolchain.md) | Accepted |
 | 0013 | [Race behaviours, sound signatures and looks](0013-race-behaviours.md)                           | Accepted |
 | 0014 | [Data-driven story, logs and radio, endings, saves with migrations](0014-story-and-saves.md)     | Accepted |
+| 0015 | [The level editor, level format and automatic level checks](0015-level-editor.md)                | Accepted |

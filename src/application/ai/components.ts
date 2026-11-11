@@ -81,6 +81,11 @@ export const Mob = defineComponent('Mob', {
   underFire: 'f32',
   /** Aggression after drives (hunger, pack, provocation, territory, night, fear). */
   aggression: 'f32',
+  /** Level patrol path index + 1 (0 = wanders), and the leg it is walking. */
+  patrol: 'u16',
+  patrolStep: 'u16',
+  /** Level spawn zone index + 1 that keeps this mob topped up (0 = none). */
+  zone: 'u8',
 });
 
 export const SCORE_FIELDS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'] as const;

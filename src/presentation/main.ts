@@ -20,6 +20,8 @@ import { SaveStore, browserStorage, type SaveSlot } from '../infrastructure/brow
 import { captureSave, restoreSave } from '../application/save/save-game';
 import type { SaveGame } from '../domain/save/save';
 import { StoryHud } from './story-hud';
+import { openEditor, readLevelHandoff } from './editor/handoff';
+import { createLevelSandbox } from '../application/level/play-level';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
 import { TouchInput } from '../infrastructure/browser/touch-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
@@ -39,6 +41,13 @@ async function bootstrap(): Promise<void> {
   if (root === null) throw new Error('#app missing');
   const opts = parseUrlOptions(window.location.search, isTouchDevice());
   for (const id of unknownEffects(opts.fx)) console.warn(`Unknown effect in ?fx: ${id}`);
+
+  if (opts.editor) {
+    // The editor is its own code-split chunk: the game never loads it unless asked.
+    const { startEditor } = await import('./editor/editor-app');
+    await startEditor(root);
+    return;
+  }
 
   const status = document.createElement('div');
   status.className = 'boot';
@@ -62,7 +71,14 @@ async function bootstrap(): Promise<void> {
           ? 'world'
           : 'street';
   const runSeed = seed(playing?.seed ?? startSave?.seed ?? opts.seed);
-  const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE), { kind });
+  // "Play from here": the editor's level, from where its camera looked.
+  const handoff = opts.level === 'session' && playing === null ? readLevelHandoff() : null;
+  const physics = await createRapierPhysics(TICK_RATE);
+  const sandbox =
+    handoff !== null
+      ? createLevelSandbox(handoff.level, physics, handoff.from)
+      : createSandbox(runSeed, physics, { kind });
+  if (handoff !== null) root.dataset['level'] = handoff.level.id;
   if (startSave !== null) restoreSave(sandbox, startSave);
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
@@ -128,6 +144,12 @@ async function bootstrap(): Promise<void> {
     hud?.toast(ok ? `SAVED · ${slot}` : 'SAVE FAILED');
     return ok;
   };
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F4') {
+      e.preventDefault();
+      openEditor();
+    }
+  });
   if (playing === null && opts.benchSeconds === 0) {
     // F5 quicksave, F9 quickload (the page reloads into the save: a clean, deterministic start).
     window.addEventListener('keydown', (e) => {
@@ -188,7 +210,9 @@ async function bootstrap(): Promise<void> {
       TICK_RATE,
       startSave,
     );
-    recording.recorder = recorder;
+    // A level from the editor is not one of the replayable scenes: its sessions are not recorded.
+    recording.recorder = handoff === null ? recorder : null;
+    if (handoff !== null) recorder = null;
     input = recording;
   }
 

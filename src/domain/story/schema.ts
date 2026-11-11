@@ -233,7 +233,11 @@ export function* conditionsIn(c: Condition): Generator<Condition> {
  * every chapter has a main quest, every race's origin, motive and weakness
  * is told by some log. Returns the problems (empty = valid).
  */
-export function validateStory(s: StoryData): string[] {
+export function validateStory(
+  s: StoryData,
+  /** The campaign must tell every race's lore; a level's side story need not. */
+  options: { readonly lore?: boolean } = {},
+): string[] {
   const errors: string[] = [];
   const ids = (kind: string, list: readonly { id: string }[]): Set<string> => {
     const set = new Set<string>();
@@ -315,9 +319,10 @@ export function validateStory(s: StoryData): string[] {
   for (const c of s.chapters)
     if (!s.quests.some((q) => q.main && q.chapter === c.id))
       errors.push(`chapter ${c.id} has no main quest`);
-  for (const race of RACES)
-    for (const aspect of LORE_ASPECTS)
-      if (!s.logs.some((l) => l.lore.some((x) => x.race === race && x.aspect === aspect)))
-        errors.push(`no log tells the ${race}s’ ${aspect}`);
+  if (options.lore !== false)
+    for (const race of RACES)
+      for (const aspect of LORE_ASPECTS)
+        if (!s.logs.some((l) => l.lore.some((x) => x.race === race && x.aspect === aspect)))
+          errors.push(`no log tells the ${race}s’ ${aspect}`);
   return errors;
 }

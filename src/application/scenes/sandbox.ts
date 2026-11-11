@@ -1,3 +1,4 @@
+import { installLevel, levelSpawnSystem, type LevelContent } from '../level/level-runtime';
 import { CAMPAIGN } from '../../domain/story/campaign';
 import type { StoryData } from '../../domain/story/schema';
 import { StoryRuntime, storySystem } from '../story/story-system';
@@ -432,6 +433,8 @@ export interface SandboxOptions {
   readonly tuning?: PlayerTuning;
   /** The story to run (default: the campaign in the open world, none elsewhere). */
   readonly story?: StoryData | null;
+  /** Placed mobs, patrols and spawn zones of an editor level (stage 9). */
+  readonly level?: LevelContent;
 }
 
 /** `physics` must be a fresh, empty world for this sandbox (it is populated here). */
@@ -567,6 +570,11 @@ export function createSandbox(
     vitalsSystem(player, probe, respawn),
     spawnerSystem(ai, probe, { population: kind === 'world' ? WORLD_POPULATION : 0 }),
   ];
+  const levelSystems: System<SimContext>[] = [];
+  if (options.level !== undefined) {
+    installLevel(world, ai, options.level);
+    levelSystems.push(levelSpawnSystem(ai, probe, options.level.spawnZones));
+  }
   const storyData =
     options.story === undefined ? (kind === 'world' ? CAMPAIGN : null) : options.story;
   const story = storyData === null ? null : new StoryRuntime(storyData);
@@ -633,6 +641,7 @@ export function createSandbox(
       ...worldSystems,
       ...aiSystems,
       ...storySystems,
+      ...levelSystems,
     ],
     hashExtras: [
       (h) => {

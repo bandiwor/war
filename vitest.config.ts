@@ -16,6 +16,9 @@ export default defineConfig({
         'src/headless/cli.ts',
         // WebGL/DOM-bound rendering: exercised by the Playwright visual suite (e2e/visual.spec.ts).
         'src/infrastructure/render/{bodycam-presenter,profiler,budgets,quality}.ts',
+        // The level editor's WebGL viewport: exercised by e2e/editor.spec.ts (its document, checks and
+        // brushes are pure and unit-tested in src/domain/level).
+        'src/infrastructure/render/editor/**',
         'src/infrastructure/render/{gl,scene,textures,postfx/effects}/**',
         'src/infrastructure/render/postfx/{pipeline,simple-pass,tonemap,types}.ts',
         'src/infrastructure/render/osd/osd-canvas.ts',

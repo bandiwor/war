@@ -2,7 +2,7 @@
   "name": "war",
   "version": "0.0.1",
   "private": true,
-  "description": "War — a realistic first-person bodycam survival shooter for the browser. Everything procedural.",
+  "description": "War \u2014 a realistic first-person bodycam survival shooter for the browser. Everything procedural.",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -21,11 +21,12 @@
     "test:e2e": "playwright test --trace off",
     "bench": "tsx bench/run.ts",
     "headless": "tsx src/headless/cli.ts",
-    "ci": "npm run typecheck && npm run lint && npm run test:coverage && npm run build && npm run check:bundle && npm run perf",
+    "ci": "npm run typecheck && npm run lint && npm run test:coverage && npm run level:check && npm run build && npm run check:bundle && npm run perf",
     "prepare": "git config core.hooksPath .githooks || true",
     "golden:update": "UPDATE_GOLDEN=1 vitest run tests/golden",
     "perf": "tsx scripts/perf-gate.ts",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "level:check": "tsx scripts/check-levels.ts"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",

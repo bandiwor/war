@@ -44,6 +44,102 @@
         letter-spacing: 0.3em;
         color: #8a949e;
       }
+      /* Level editor (stage 9). */
+      #app.editor {
+        display: grid;
+        grid-template-columns: 170px minmax(0, 1fr) 320px;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          'top top top'
+          'left view right'
+          'status status status';
+      }
+      .ed-top {
+        grid-area: top;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 6px;
+        background: #0c0f12;
+        border-bottom: 1px solid #2a3036;
+      }
+      .ed-left,
+      .ed-right {
+        overflow: auto;
+        padding: 6px;
+        background: #0c0f12;
+      }
+      .ed-left {
+        grid-area: left;
+        display: grid;
+        align-content: start;
+        gap: 4px;
+      }
+      .ed-right {
+        grid-area: right;
+      }
+      .ed-canvas {
+        grid-area: view;
+        width: 100%;
+        height: 100%;
+        display: block;
+        min-height: 0;
+        cursor: crosshair;
+      }
+      .ed-status {
+        grid-area: status;
+        padding: 3px 8px;
+        background: #0c0f12;
+        color: #8a949e;
+      }
+      #app.editor button,
+      #app.editor select,
+      #app.editor input,
+      #app.editor textarea {
+        font: inherit;
+        background: #161b20;
+        color: #c8d0d8;
+        border: 1px solid #2a3036;
+      }
+      #app.editor button.active {
+        background: #3a4a58;
+        color: #fff;
+      }
+      #app.editor textarea {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #app.editor select[size] {
+        width: 100%;
+      }
+      .ed-hint {
+        color: #6c7680;
+        margin: 4px 0;
+      }
+      .ed-issue {
+        cursor: pointer;
+        padding: 2px 0;
+      }
+      .ed-issue.error {
+        color: #ff7a6a;
+      }
+      .ed-issue.warning {
+        color: #ffd36a;
+      }
+      .ed-ok {
+        color: #59c48a;
+      }
+      .ed-sel {
+        color: #ffb347;
+        margin-bottom: 4px;
+      }
+      @media (max-width: 760px) {
+        #app.editor {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto auto 50vh auto auto;
+          grid-template-areas: 'top' 'left' 'view' 'right' 'status';
+        }
+      }
       /* Story HUD (stage 8): subtitles, prompt, toasts, chapter card, journal, ending. */
       .story-hud {
         position: absolute;

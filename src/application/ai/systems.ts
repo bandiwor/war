@@ -525,7 +525,21 @@ function decideMob(
   }
   // Goals that do not follow the target are picked here (deterministic rng stream).
   const action = f.action[row] ?? 0;
-  if (
+  const patrol = action === WANDER ? ai.patrols[(f.patrol[row] ?? 0) - 1] : undefined;
+  if (patrol !== undefined) {
+    // A patrolling mob walks its path instead of wandering: loops go round, open paths go back and forth.
+    if ((f.hasGoal[row] ?? 0) === 0 || reached(f, row, mx, mz)) {
+      const n = patrol.points.length / 2;
+      const legs = patrol.loop ? n : Math.max(1, 2 * n - 2);
+      const step =
+        (f.hasGoal[row] ?? 0) === 0
+          ? (f.patrolStep[row] ?? 0)
+          : ((f.patrolStep[row] ?? 0) + 1) % legs;
+      f.patrolStep[row] = step;
+      const p = patrol.loop || step < n ? step : 2 * n - 2 - step;
+      setGoal(f, row, patrol.points[p * 2] ?? mx, patrol.points[p * 2 + 1] ?? mz);
+    }
+  } else if (
     (action === WANDER || action === SEARCH) &&
     ((f.hasGoal[row] ?? 0) === 0 || reached(f, row, mx, mz))
   ) {

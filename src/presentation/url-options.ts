@@ -15,6 +15,8 @@ import { isQualityName, type QualityName } from '../infrastructure/render/qualit
  *   ?replay=session     play back the replay stored by the debug menu (Sim tab)
  *   ?scene=world|street|range  the open world (default), the stage-1 test street, or the shooting range
  *   ?stim=damage:0.5,fear:0.2,emi:0
+ *   ?editor=1           the level editor (F4 switches between game and editor)
+ *   ?level=session      play the editor's level ("play from here")
  *   ?load=quick|auto    start from that save slot (seed and scene come from the save)
  *   ?touch=1|0          force the on-screen phone controls on/off (default: on for touch screens,
  *                       which also default to ?quality=low)
@@ -33,6 +35,10 @@ export interface UrlOptions {
   readonly replay: 'session' | null;
   /** Start from a save slot (quickload, the ending screen, the debug menu). */
   readonly load: 'quick' | 'auto' | null;
+  /** Open the level editor instead of the game. */
+  readonly editor: boolean;
+  /** Play the editor's level (handed over in session storage: "play from here"). */
+  readonly level: 'session' | null;
   readonly scene: 'world' | 'street' | 'range';
   readonly stimulus: BodycamStimulus | null;
   readonly touch: boolean;
@@ -76,6 +82,8 @@ export function parseUrlOptions(search: string, touchDevice = false): UrlOptions
     spin: num(q.get('spin'), 0),
     benchSeconds: Math.max(0, num(q.get('bench'), 0)),
     replay: q.get('replay') === 'session' ? 'session' : null,
+    editor: q.get('editor') === '1',
+    level: q.get('level') === 'session' ? 'session' : null,
     load: q.get('load') === 'quick' ? 'quick' : q.get('load') === 'auto' ? 'auto' : null,
     scene: sceneOf(q.get('scene')),
     stimulus,

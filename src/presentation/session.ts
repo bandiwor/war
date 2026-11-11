@@ -6,6 +6,17 @@ import type { CommandQueue } from '../application/replay/command-queue';
 import type { CombatLog } from './combat-log';
 import type { AudioEngine } from '../infrastructure/audio/audio-engine';
 import type { FootstepPlayer } from '../infrastructure/audio/footstep-player';
+import type { SaveSlot, SlotInfo } from '../infrastructure/browser/save-store';
+import type { StoryHud } from './story-hud';
+
+/** The story's player-facing controls, for the debug menu and tests. */
+export interface StoryUi {
+  readonly hud: StoryHud | null;
+  save(slot: SaveSlot): boolean;
+  /** Reloads the page into the slot. */
+  load(slot: SaveSlot): void;
+  slots(): SlotInfo[];
+}
 
 /** Storage key for a replay handed from the debug menu to the next page load. */
 export const SESSION_REPLAY_KEY = 'war.replay';
@@ -25,6 +36,8 @@ export interface GameSession {
   readonly combat: CombatLog;
   /** Inject input commands into the next tick (debug tools); null in playback/visual modes. */
   readonly commands: CommandQueue | null;
+  /** Story HUD and save slots (null when the scene has no story or in playback). */
+  readonly story: StoryUi | null;
   footstepCount: number;
 }
 

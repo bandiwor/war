@@ -1,3 +1,4 @@
+import type { StoryNote } from '../story/engine';
 import type { SurfaceId } from '../world/surfaces';
 
 /**
@@ -152,6 +153,13 @@ export interface MobRangedEvent {
 
 export const RANGED_KINDS = ['laser', 'spit', 'leap', 'latch', 'thrown', 'call'] as const;
 
+/** Something the story did (quest, log found, radio line, chapter, ending). */
+export interface StoryEvent {
+  note: StoryNote;
+}
+
+const NO_NOTE: StoryNote = { kind: 'battery' };
+
 export class GameEvents {
   readonly footstep = new EventChannel<FootstepEvent>(() => ({
     x: 0,
@@ -233,7 +241,10 @@ export class GameEvents {
     damage: 0,
   }));
 
+  readonly story = new EventChannel<StoryEvent>(() => ({ note: NO_NOTE }));
+
   clear(): void {
+    this.story.clear();
     this.footstep.clear();
     this.land.clear();
     this.jump.clear();

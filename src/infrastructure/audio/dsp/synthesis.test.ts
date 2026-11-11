@@ -179,7 +179,9 @@ describe('ambience renderer', () => {
     r.setMuted('heartbeat', false);
   });
 
-  it('renders faster than 15x real time (audio budget)', () => {
+  // The real budget (≥15× real time) is held by the perf gate (scripts/perf-gate.ts), measured
+  // alone and uninstrumented; here, under coverage in a parallel suite, only a gross regression.
+  it('renders well faster than real time (sanity; the budget is in the perf gate)', () => {
     const r = new AmbienceRenderer(SR, 3);
     r.setMix(
       computeMix(
@@ -198,7 +200,7 @@ describe('ambience renderer', () => {
       r.render(l, rr);
       ms = Math.min(ms, performance.now() - t0);
     }
-    expect(ms).toBeLessThan(2000 / 15);
+    expect(ms).toBeLessThan(2000 / 4);
   });
 });
 

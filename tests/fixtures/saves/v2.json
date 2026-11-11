@@ -1,0 +1,29 @@
+{
+  "format": "war-save",
+  "version": 2,
+  "seed": 8,
+  "scene": "world",
+  "player": {
+    "x": 128,
+    "y": 0,
+    "z": -130,
+    "yaw": 0.5,
+    "health": 80,
+    "flashlight": false,
+    "battery": 0.4
+  },
+  "ammo": { "r9x19": 12, "flare": 1 },
+  "story": {
+    "chapter": "power",
+    "flags": [["power.genA", 1]],
+    "quests": [
+      ["rally", "done"],
+      ["substation", "active"]
+    ],
+    "objectives": ["rally.camera", "rally.reach", "substation.genA", "substation.yards"],
+    "logs": ["reyesCam"],
+    "used": ["generatorA", "reyesCamera"],
+    "fired": ["toPower"],
+    "kills": { "zombie": 3, "robot": 0, "plant": 0, "animal": 1, "any": 4 }
+  }
+}

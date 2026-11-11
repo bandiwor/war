@@ -30,6 +30,25 @@ describe('empty world', () => {
     expect(store.fields.buttons[row]).toBe(actionBit('flashlight'));
   });
 
+  it('a tap inside one tick (down and up before it ends) is still a press', () => {
+    const { simulation, player } = createEmptyWorld(seed(1));
+    const store = simulation.world.store(PlayerIntent);
+    const row = store.rowOf(player);
+    simulation.step([
+      { type: 'action', action: 'use', pressed: true },
+      { type: 'action', action: 'use', pressed: false },
+    ]);
+    expect(store.fields.buttons[row]).toBe(0);
+    expect(store.fields.pressed[row]).toBe(actionBit('use'));
+    simulation.step([]);
+    expect(store.fields.pressed[row]).toBe(0);
+    // Holding is one press, not one per tick; a repeat while held is no new press.
+    simulation.step([{ type: 'action', action: 'use', pressed: true }]);
+    expect(store.fields.pressed[row]).toBe(actionBit('use'));
+    simulation.step([{ type: 'action', action: 'use', pressed: true }]);
+    expect(store.fields.pressed[row]).toBe(0);
+  });
+
   it('does nothing if the player has lost its intent component', () => {
     const { simulation, player } = createEmptyWorld(seed(1));
     simulation.world.despawn(player);

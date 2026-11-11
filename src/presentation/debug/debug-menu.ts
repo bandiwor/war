@@ -11,6 +11,7 @@ import type { BodycamPresenter } from '../../infrastructure/render/bodycam-prese
 import { FRAME_BUDGETS } from '../../infrastructure/render/budgets';
 import { installWorldTab, type WorldDebugApi } from './world-tab';
 import { installBestiaryTab, type BestiaryApi } from './bestiary-tab';
+import { installStoryTab, type StoryDebugApi } from './story-tab';
 import { QUALITY_PRESETS } from '../../infrastructure/render/quality';
 import { downloadReplay, playReplayFile, type GameSession } from '../session';
 import { createRenderView, readRenderView } from '../../application/scenes/sandbox';
@@ -92,6 +93,12 @@ export interface WarDebugApi {
   inspectNearest: BestiaryApi['inspectNearest'];
   setAiOverlay: BestiaryApi['setAiOverlay'];
   cheat: BestiaryApi['cheat'];
+  storyState: StoryDebugApi['storyState'];
+  storyGo: StoryDebugApi['storyGo'];
+  storyUse: StoryDebugApi['storyUse'];
+  saveGame: StoryDebugApi['saveGame'];
+  loadGame: StoryDebugApi['loadGame'];
+  saveSlots: StoryDebugApi['saveSlots'];
   audioStats(): {
     zones: Partial<Record<string, number>>;
     levels: Partial<Record<string, number>>;
@@ -361,6 +368,7 @@ export function installDebugMenu({
 
   // --- World ----------------------------------------------------------------
   const worldTab = installWorldTab(addSection('World'), session.sandbox, presenter, queue);
+  const storyTab = installStoryTab(addSection('Story'), session.sandbox, queue, session.story);
 
   // --- Bestiary ---------------------------------------------------------------
   const bestiaryTab = installBestiaryTab(
@@ -525,6 +533,7 @@ export function installDebugMenu({
     selectWeapon,
     ...worldTab.api,
     ...bestiaryTab.api,
+    ...storyTab.api,
     aimAt(x, y, z) {
       const v = presenter.view;
       const yaw = Math.atan2(-(x - v.x), -(z - v.z));
@@ -615,6 +624,7 @@ export function installDebugMenu({
       ].join('\n');
       graph.draw(p.frameMs, FRAME_BUDGETS.frame);
       worldTab.refresh();
+      storyTab.refresh();
       const w = presenter.view.weapon;
       weaponInfo.textContent = [
         `weapon  ${w.id ?? '-'}  (${w.phase}${w.phase === 'reloading' ? ` · ${w.stage}` : ''})`,

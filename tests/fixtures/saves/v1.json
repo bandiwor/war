@@ -1,0 +1,8 @@
+{
+  "format": "war-save",
+  "version": 1,
+  "seed": 8,
+  "scene": "world",
+  "player": { "x": 128, "y": 0, "z": -60, "yaw": 1.5, "health": 64 },
+  "flags": { "power.genA": 1, "keycard": 0 }
+}

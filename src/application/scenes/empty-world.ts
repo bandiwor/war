@@ -36,6 +36,9 @@ export function intentSystem(player: EntityId): System<SimContext> {
       if (row < 0) return;
       const f = store.fields;
       const before = f.buttons[row] ?? 0;
+      // Buttons pressed during this tick, even if released again before it ends: a quick tap
+      // (key down and up between two ticks, common when a frame hitches) is still a press.
+      let tapped = 0;
       const select = ctx.world.tryStore(SelectIntent);
       const srow = select === null ? -1 : select.rowOf(player);
       if (select !== null && srow >= 0) select.fields.slot[srow] = -1;
@@ -56,6 +59,7 @@ export function intentSystem(player: EntityId): System<SimContext> {
             const bit = actionBit(cmd.action);
             const prev = f.buttons[row] ?? 0;
             f.buttons[row] = cmd.pressed ? prev | bit : prev & ~bit;
+            if (cmd.pressed && (prev & bit) === 0) tapped |= bit;
             break;
           }
           case 'select':
@@ -71,7 +75,7 @@ export function intentSystem(player: EntityId): System<SimContext> {
             assertNever(cmd, 'input command');
         }
       }
-      f.pressed[row] = (f.buttons[row] ?? 0) & ~before;
+      f.pressed[row] = ((f.buttons[row] ?? 0) & ~before) | tapped;
     },
   };
 }

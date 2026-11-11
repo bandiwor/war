@@ -30,6 +30,7 @@ import { Viewmodel } from './weapons/viewmodel';
 import { CombatFx } from './weapons/combat-fx';
 import { MobRenderer } from './mobs/mob-renderer';
 import { MobFx } from './mobs/mob-fx';
+import { StoryProps } from './story/story-props';
 import { AiOverlay } from './mobs/ai-overlay';
 import type { GameEvents } from '../../domain/events/bus';
 import { WEAPONS } from '../../domain/weapons/registry';
@@ -88,6 +89,8 @@ export class BodycamPresenter implements Presenter {
   readonly combatFx: CombatFx;
   readonly mobs: MobRenderer;
   readonly mobFx: MobFx;
+  /** The story's things in the world (open world only). */
+  readonly storyProps: StoryProps | null;
   readonly aiOverlay: AiOverlay;
   private readonly baseFov = 78;
   private zoom = 1;
@@ -110,6 +113,8 @@ export class BodycamPresenter implements Presenter {
     this.aiOverlay = new AiOverlay(options.sandbox);
     this.mobFx = new MobFx(options.sandbox);
     sceneRig.scene.add(this.mobs.group, this.aiOverlay.group, this.mobFx.group);
+    this.storyProps = options.sandbox.story === null ? null : new StoryProps(options.sandbox.story);
+    if (this.storyProps !== null) sceneRig.scene.add(this.storyProps.group);
     const depth = new THREE.DepthTexture(1, 1);
     depth.type = THREE.UnsignedIntType;
     this.sceneTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -390,6 +395,7 @@ export class BodycamPresenter implements Presenter {
     this.combatFx.update(frozen !== undefined ? 0 : dt);
     this.mobs.update(alpha, frozen !== undefined ? 0 : Math.min(dt, 0.1), time);
     this.mobFx.update(frozen !== undefined ? 0 : Math.min(dt, 0.1));
+    this.storyProps?.update(time);
     this.aiOverlay.update(view.x, view.z);
 
     this.renderer.setRenderTarget(this.sceneTarget);
@@ -448,6 +454,7 @@ export class BodycamPresenter implements Presenter {
     this.mobs.dispose();
     this.aiOverlay.dispose();
     this.mobFx.dispose();
+    this.storyProps?.dispose();
     this.flashlight.dispose();
     this.sceneTarget.dispose();
     this.sceneRig.dispose();

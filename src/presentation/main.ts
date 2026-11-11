@@ -15,6 +15,11 @@ import { AudioEngine } from '../infrastructure/audio/audio-engine';
 import { FootstepPlayer } from '../infrastructure/audio/footstep-player';
 import { WeaponAudio } from '../infrastructure/audio/weapon-audio';
 import { MobAudio } from '../infrastructure/audio/mob-audio';
+import { StoryAudio } from '../infrastructure/audio/story-audio';
+import { SaveStore, browserStorage, type SaveSlot } from '../infrastructure/browser/save-store';
+import { captureSave, restoreSave } from '../application/save/save-game';
+import type { SaveGame } from '../domain/save/save';
+import { StoryHud } from './story-hud';
 import { KeyboardMouseInput } from '../infrastructure/browser/keyboard-input';
 import { TouchInput } from '../infrastructure/browser/touch-input';
 import { RafFrameSource } from '../infrastructure/browser/raf-frame-source';
@@ -24,7 +29,7 @@ import { EFFECT_FACTORIES } from '../infrastructure/render/postfx/effects';
 import type { EffectFactories } from '../infrastructure/render/postfx/types';
 import { QUALITY_PRESETS } from '../infrastructure/render/quality';
 import { createTextureBaker } from '../infrastructure/render/textures/texture-baker';
-import { loadSessionReplay, type GameSession } from './session';
+import { loadSessionReplay, type GameSession, type StoryUi } from './session';
 import { isTouchDevice, mountTouchControls } from './touch-controls';
 import { applyFxSelection, parseUrlOptions, unknownEffects } from './url-options';
 
@@ -43,16 +48,22 @@ async function bootstrap(): Promise<void> {
   const playing = opts.replay === 'session' ? loadSessionReplay() : null;
   if (playing !== null && playing.scene === 'empty')
     throw new Error('Empty-world replays have no renderable scene');
+  // A session starts from a save when it replays one that did, or when asked to load a slot.
+  const saves = new SaveStore(browserStorage());
+  const startSave: SaveGame | null =
+    playing !== null ? playing.save : opts.load !== null ? saves.read(opts.load) : null;
+  const sceneName = playing?.scene ?? startSave?.scene ?? null;
   const kind: SandboxKind =
-    playing !== null
-      ? playing.scene === 'range'
+    sceneName === null
+      ? opts.scene
+      : sceneName === 'range'
         ? 'range'
-        : playing.scene === 'world'
+        : sceneName === 'world'
           ? 'world'
-          : 'street'
-      : opts.scene;
-  const runSeed = seed(playing?.seed ?? opts.seed);
+          : 'street';
+  const runSeed = seed(playing?.seed ?? startSave?.seed ?? opts.seed);
   const sandbox = createSandbox(runSeed, await createRapierPhysics(TICK_RATE), { kind });
+  if (startSave !== null) restoreSave(sandbox, startSave);
   const canvas = document.createElement('canvas');
   canvas.className = 'view';
   canvas.dataset['testid'] = 'view';
@@ -98,6 +109,37 @@ async function bootstrap(): Promise<void> {
   const footsteps = audio === null ? null : new FootstepPlayer(audio, runSeed);
   const weaponAudio = audio === null ? null : new WeaponAudio(audio, runSeed);
   const mobAudio = audio === null ? null : new MobAudio(audio, runSeed);
+  const storyAudio = audio === null ? null : new StoryAudio(audio, runSeed);
+  const story = sandbox.story;
+  const hud =
+    story === null
+      ? null
+      : new StoryHud(root, story, {
+          loadLatest: () => {
+            reloadWith({ load: saves.read('quick') !== null ? 'quick' : 'auto' });
+          },
+          newGame: () => {
+            reloadWith({ load: null });
+          },
+        });
+  const saveTo = (slot: SaveSlot): boolean => {
+    if (playing !== null || story?.engine.ended === true) return false;
+    const ok = saves.write(slot, captureSave(sandbox));
+    hud?.toast(ok ? `SAVED · ${slot}` : 'SAVE FAILED');
+    return ok;
+  };
+  if (playing === null && opts.benchSeconds === 0) {
+    // F5 quicksave, F9 quickload (the page reloads into the save: a clean, deterministic start).
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'F5') {
+        e.preventDefault();
+        saveTo('quick');
+      } else if (e.code === 'F9') {
+        e.preventDefault();
+        if (saves.read('quick') !== null) reloadWith({ load: 'quick' });
+      }
+    });
+  }
   if (weaponAudio !== null) {
     presenter.combatFx.onCasingLanded = (x, y, z, shell) => {
       weaponAudio.casingLanded(x, y, z, shell);
@@ -144,12 +186,30 @@ async function bootstrap(): Promise<void> {
       runSeed,
       TICK_RATE,
       TICK_RATE,
+      startSave,
     );
     recording.recorder = recorder;
     input = recording;
   }
 
-  const session = newSession(sandbox, recorder, playing, audio, footsteps, director, commands);
+  const storyUi: StoryUi = {
+    hud,
+    save: saveTo,
+    load: (slot) => {
+      reloadWith({ load: slot });
+    },
+    slots: () => saves.list(),
+  };
+  const session = newSession(
+    sandbox,
+    recorder,
+    playing,
+    audio,
+    footsteps,
+    director,
+    commands,
+    storyUi,
+  );
   const onTick = (s: Simulation): void => {
     markTick();
     recorder?.afterStep(s);
@@ -164,6 +224,11 @@ async function bootstrap(): Promise<void> {
       weaponAudio.consume(events);
     }
     mobAudio?.consume(events);
+    storyAudio?.consume(events);
+    hud?.consume(events);
+    // Autosave at every new chapter.
+    for (let i = 0; i < events.story.size; i++)
+      if (events.story.at(i)?.note.kind === 'chapter') saveTo('auto');
     session.combat.record(events);
     if (footsteps !== null) {
       for (let i = 0; i < events.footstep.size; i++) {
@@ -192,6 +257,7 @@ async function bootstrap(): Promise<void> {
         mobAudio.update(sandbox, dt);
         mobAudio.interference(v.stimulus.emi, dt);
       }
+      hud?.update(dt, presenter.view.x, presenter.view.z);
       lastFrame = now;
     },
   };
@@ -219,6 +285,15 @@ async function bootstrap(): Promise<void> {
   }
 }
 
+/** Reloads the page with the given save slot (or none: a new game), keeping other options. */
+function reloadWith(o: { load: 'quick' | 'auto' | null }): void {
+  const url = new URL(window.location.href);
+  if (o.load === null) url.searchParams.delete('load');
+  else url.searchParams.set('load', o.load);
+  url.searchParams.delete('replay');
+  window.location.href = url.toString();
+}
+
 function newSession(
   sandbox: Sandbox,
   recorder: ReplayRecorder | null,
@@ -227,9 +302,11 @@ function newSession(
   footsteps: FootstepPlayer | null = null,
   director: SoundscapeDirector | null = null,
   commands: CommandQueue | null = null,
+  story: StoryUi | null = null,
 ): GameSession {
   return {
     sandbox,
+    story,
     recorder,
     playing,
     audio,

@@ -16,6 +16,36 @@ import { spawnMob } from '../src/application/ai/systems';
 import { Mob } from '../src/application/ai/components';
 import { seed } from '../src/domain/core/brand';
 import { createChurnWorld } from '../tests/fixtures/churn-world';
+import { AmbienceRenderer } from '../src/infrastructure/audio/dsp/ambience-renderer';
+import { computeMix, createAmbienceContext, createMix } from '../src/domain/audio/mix';
+
+/**
+ * The ambient bed's DSP cost: seconds of audio rendered per second of CPU
+ * for the densest mix (forest, rain, full danger), best of five 2 s renders.
+ * Measured here, alone and without coverage instrumentation, not in the
+ * unit tests, where a parallel suite makes wall-clock budgets meaningless.
+ */
+function measureAmbience(): number {
+  const sr = 48000;
+  const r = new AmbienceRenderer(sr, 3);
+  r.setMix(
+    computeMix(
+      { ...createAmbienceContext(), zones: { forest: 1 }, rain: 1, danger: 1 },
+      createMix(),
+    ),
+  );
+  r.settle();
+  const l = new Float32Array(sr * 2);
+  const rr = new Float32Array(sr * 2);
+  r.render(l, rr); // warm-up
+  let ms = Infinity;
+  for (let i = 0; i < 5; i++) {
+    const t0 = performance.now();
+    r.render(l, rr);
+    ms = Math.min(ms, performance.now() - t0);
+  }
+  return 2000 / ms;
+}
 
 const Budget = z.object({ minTicksPerSecond: z.number(), maxMinorGcPerMillionTicks: z.number() });
 const budgets = z
@@ -25,6 +55,7 @@ const budgets = z
     sandbox: Budget,
     worldStreaming: Budget.extend({ maxP999TickMs: z.number() }),
     aiCrowd: Budget.extend({ maxP999TickMs: z.number() }),
+    ambience: z.object({ minRealtimeFactor: z.number() }),
   })
   .parse(JSON.parse(readFileSync(new URL('../perf-budgets.json', import.meta.url), 'utf8')));
 
@@ -219,6 +250,14 @@ if (crowd.gcPerM > cb.maxMinorGcPerMillionTicks) {
 if (crowd.p999 > cb.maxP999TickMs) {
   console.error(
     `FAIL aiCrowd: tick p99.9 ${crowd.p999.toFixed(3)} ms > ${String(cb.maxP999TickMs)} ms`,
+  );
+  failed = true;
+}
+const ambience = measureAmbience();
+console.log(`ambience: ${ambience.toFixed(1)}× real time (densest mix)`);
+if (ambience < budgets.ambience.minRealtimeFactor) {
+  console.error(
+    `FAIL ambience: ${ambience.toFixed(1)}× real time < ${String(budgets.ambience.minRealtimeFactor)}×`,
   );
   failed = true;
 }

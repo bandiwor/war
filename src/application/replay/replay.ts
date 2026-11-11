@@ -2,12 +2,13 @@ import { z } from 'zod';
 import { InputCommandSchema, type InputCommand } from '../../domain/input/commands';
 import { seed as toSeed, type Seed } from '../../domain/core/brand';
 import type { Simulation } from '../simulation';
+import { SaveSchema, type SaveGame } from '../../domain/save/save';
 
 /**
  * Replay = seed + the commands issued on each tick. Stored sparsely (only
  * ticks with input) so files stay small and diffs stay readable.
  */
-export const REPLAY_VERSION = 2;
+export const REPLAY_VERSION = 3;
 
 /** Scenes a replay can target; playback refuses to run a replay on the wrong scene. */
 export const REPLAY_SCENES = ['empty', 'sandbox', 'range', 'world'] as const;
@@ -28,9 +29,22 @@ const ReplayV1Schema = z.object({
   checkpoints: Checkpoints,
 });
 
+const ReplayV2Schema = z.object({
+  format: z.literal('war-replay'),
+  version: z.literal(2),
+  scene: z.enum(REPLAY_SCENES),
+  seed: z.number().int().min(0).max(0xffffffff),
+  tickRate: z.number().int().positive(),
+  length: z.number().int().nonnegative(),
+  frames: Frames,
+  checkpoints: Checkpoints,
+});
+
 export const ReplaySchema = z.object({
   format: z.literal('war-replay'),
   version: z.literal(REPLAY_VERSION),
+  /** The save the session started from (stage 8), or null for a new game. */
+  save: SaveSchema.nullable(),
   scene: z.enum(REPLAY_SCENES),
   seed: z.number().int().min(0).max(0xffffffff),
   tickRate: z.number().int().positive(),
@@ -43,16 +57,16 @@ export type Replay = z.infer<typeof ReplaySchema>;
 
 /**
  * Migrations keyed by source version. v1 (stage 0) predates scenes: every v1
- * replay was recorded on the empty world.
+ * replay was recorded on the empty world. v2 (stages 2–7) predates saves:
+ * every v2 session started a new game.
  */
 function migrate(json: unknown): unknown {
   const version: unknown =
     typeof json === 'object' && json !== null ? Reflect.get(json, 'version') : undefined;
-  if (version === 1) {
-    const v1 = ReplayV1Schema.parse(json);
-    return { ...v1, version: 2, scene: 'empty' };
-  }
-  return json;
+  let v = json;
+  if (version === 1) v = { ...ReplayV1Schema.parse(v), version: 2, scene: 'empty' };
+  if (version === 1 || version === 2) v = { ...ReplayV2Schema.parse(v), version: 3, save: null };
+  return v;
 }
 
 export function parseReplay(json: unknown): Replay {
@@ -79,6 +93,8 @@ export class ReplayRecorder {
     private readonly tickRate: number,
     /** Store a state-hash checkpoint every N ticks (0 = never). */
     private readonly checkpointEvery = 0,
+    /** The save this session was loaded from (null = a new game). */
+    private readonly save: SaveGame | null = null,
   ) {}
 
   get ticks(): number {
@@ -104,6 +120,7 @@ export class ReplayRecorder {
     return {
       format: 'war-replay',
       version: REPLAY_VERSION,
+      save: this.save,
       scene: this.scene,
       seed: this.seed,
       tickRate: this.tickRate,
@@ -125,9 +142,15 @@ export interface PlaybackResult {
   } | null;
 }
 
-/** Runs a replay on a fresh simulation built by `create`, verifying checkpoints. */
-export function playReplay(replay: Replay, create: (seed: Seed) => Simulation): PlaybackResult {
-  const sim = create(toSeed(replay.seed));
+/**
+ * Runs a replay on a fresh simulation built by `create` (which must apply
+ * `save` when there is one), verifying checkpoints.
+ */
+export function playReplay(
+  replay: Replay,
+  create: (seed: Seed, save: SaveGame | null) => Simulation,
+): PlaybackResult {
+  const sim = create(toSeed(replay.seed), replay.save);
   if (sim.tickRate !== replay.tickRate) {
     throw new Error(
       `Replay tickRate ${String(replay.tickRate)} != simulation ${String(sim.tickRate)}`,

@@ -11,7 +11,15 @@ tablets get on-screen controls, best in landscape).
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 7, the races.** Zombies hunt by smell through a diffusing pheromone field,
+> Status: **stage 8, the story.** You are KESTREL-2, the last of a recovery team sent into the
+> Varn quarantine zone. The campaign runs five chapters across the five hubs and ends in one of
+> three endings. It is told over the radio (subtitled, with a synthesised radio voice), in found
+> notes, audio logs and other people's bodycam recordings, and kept in a journal (J). The story
+> is data: quests, objectives, triggers, logs, radio and interactables, all validated, with every
+> race's origin, motive and weakness told in some log. Saves (F5 quicksave, F9 quickload,
+> autosave at each chapter) are versioned JSON with migrations. Replays can start from a save.
+> Story: [docs/lore/story.md](docs/lore/story.md).
+> Previously: **stage 7, the races.** Zombies hunt by smell through a diffusing pheromone field,
 > recruit each other with alarm scent and flee light. Animals have hunger, fear, packs and
 > territory, warn before they attack and fear the flashlight. Plants bite, spit acid that pools
 > and burns, and creepers leap and latch on until shaken off. Robots see through cameras you can
@@ -54,19 +62,22 @@ npm run dev
 
 Open the printed URL and click to capture the mouse.
 
-| Input        | Action                                                                                  |
-| ------------ | --------------------------------------------------------------------------------------- |
-| Mouse        | Look                                                                                    |
-| W A S D      | Walk                                                                                    |
-| Shift        | Sprint (drains stamina)                                                                 |
-| Space        | Jump                                                                                    |
-| Left mouse   | Fire / swing / throw                                                                    |
-| Right mouse  | Aim down sights (rifle: 6× optic)                                                       |
-| R            | Reload (also clears a jam)                                                              |
-| 1–9, 0, -    | Select weapon slot (`-` is the RPG-7); mouse wheel / B for next / fire mode             |
-| Left Ctrl    | Crouch (hold; you stay down under low ceilings)                                         |
-| F            | Flashlight on/off (drains the battery shown in the OSD)                                 |
-| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam · Range · World · Bestiary · Audio |
+| Input        | Action                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------- |
+| Mouse        | Look                                                                                            |
+| W A S D      | Walk                                                                                            |
+| Shift        | Sprint (drains stamina)                                                                         |
+| Space        | Jump                                                                                            |
+| Left mouse   | Fire / swing / throw                                                                            |
+| Right mouse  | Aim down sights (rifle: 6× optic)                                                               |
+| R            | Reload (also clears a jam)                                                                      |
+| 1–9, 0, -    | Select weapon slot (`-` is the RPG-7); mouse wheel / B for next / fire mode                     |
+| Left Ctrl    | Crouch (hold; you stay down under low ceilings)                                                 |
+| F            | Flashlight on/off (drains the battery shown in the OSD)                                         |
+| E            | Use (take a log, start a generator, access a terminal) when the prompt shows                    |
+| J            | Journal: chapter, tasks, every log found                                                        |
+| F5 / F9      | Quicksave / quickload (autosave at each new chapter; `?load=quick` or `?load=auto`)             |
+| <kbd>~</kbd> | Debug menu (dev builds only): Sim · Render · Bodycam · Range · World · Story · Bestiary · Audio |
 
 On a phone or tablet the game shows touch controls. It also starts at `?quality=low`.
 

@@ -44,6 +44,146 @@
         letter-spacing: 0.3em;
         color: #8a949e;
       }
+      /* Story HUD (stage 8): subtitles, prompt, toasts, chapter card, journal, ending. */
+      .story-hud {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        letter-spacing: 0.04em;
+      }
+      /* Classes that set display must not override the hidden attribute. */
+      .story-hud [hidden] {
+        display: none !important;
+      }
+      .story-subtitle {
+        position: absolute;
+        left: 50%;
+        bottom: 9%;
+        transform: translateX(-50%);
+        max-width: min(720px, calc(100% - 32px));
+        padding: 6px 12px;
+        background: rgba(0, 0, 0, 0.62);
+        color: #e8ecef;
+        text-align: center;
+        font-size: 14px;
+      }
+      .story-channel {
+        color: #ffb347;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        margin-bottom: 2px;
+      }
+      .story-prompt {
+        position: absolute;
+        left: 50%;
+        top: 62%;
+        transform: translateX(-50%);
+        padding: 3px 10px;
+        border: 1px solid rgba(255, 179, 71, 0.6);
+        background: rgba(0, 0, 0, 0.45);
+        color: #ffcf8a;
+      }
+      .story-toasts {
+        position: absolute;
+        left: 16px;
+        top: 64px;
+        display: grid;
+        gap: 4px;
+      }
+      .story-toast {
+        padding: 2px 8px;
+        background: rgba(0, 0, 0, 0.5);
+        color: #cfe3d6;
+        border-left: 2px solid #59c48a;
+      }
+      .story-chapter {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 24%;
+        text-align: center;
+        color: #d5dbe0;
+        text-shadow: 0 0 8px #000;
+      }
+      .story-chapter-title {
+        font-size: 26px;
+        letter-spacing: 0.4em;
+        margin-bottom: 8px;
+      }
+      .story-journal {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(620px, calc(100% - 32px));
+        max-height: 76%;
+        overflow: auto;
+        padding: 14px 18px;
+        background: rgba(6, 8, 10, 0.92);
+        border: 1px solid #3a4248;
+        pointer-events: auto;
+      }
+      .story-journal-title {
+        color: #ffb347;
+        letter-spacing: 0.2em;
+        margin: 6px 0;
+      }
+      .story-journal-summary,
+      .story-quest-summary {
+        color: #8a949e;
+        margin-bottom: 6px;
+      }
+      .story-quest {
+        margin: 8px 0;
+      }
+      .story-quest.done,
+      .story-objective.done {
+        color: #6c7680;
+      }
+      .story-objective {
+        margin-left: 14px;
+      }
+      .story-log {
+        margin: 8px 0;
+        padding-left: 8px;
+        border-left: 1px solid #3a4248;
+      }
+      .story-log-title {
+        color: #c8d0d8;
+      }
+      .story-log-line {
+        color: #9aa4ad;
+      }
+      .story-journal-hint {
+        color: #5c666e;
+        margin-top: 10px;
+      }
+      .story-ending {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 10px;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.94);
+        color: #d5dbe0;
+        text-align: center;
+        pointer-events: auto;
+      }
+      .story-ending-title {
+        font-size: 24px;
+        letter-spacing: 0.35em;
+        color: #ffb347;
+        margin-bottom: 12px;
+      }
+      .story-ending-line {
+        max-width: 640px;
+      }
+      .story-ending-buttons button {
+        margin: 16px 8px 0;
+        font: inherit;
+      }
       .debug-menu {
         position: absolute;
         top: 12px;

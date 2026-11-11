@@ -97,13 +97,17 @@ describe('replay', () => {
     expect(parseReplay(base).length).toBe(3);
   });
 
-  it('migrates v1 replays (stage 0, no scene) to v2 on the empty world', () => {
+  it('migrates v1 replays (stage 0, no scene) and v2 (no save) to v3 on the empty world', () => {
     const { replay, hash } = record(120, 60);
-    const { scene: _scene, ...rest } = replay;
+    const { scene: _scene, save: _save, ...rest } = replay;
     const v1 = { ...rest, version: 1 };
     const migrated = parseReplay(JSON.parse(JSON.stringify(v1)));
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.scene).toBe('empty');
+    expect(migrated.save).toBeNull();
+    const v2 = parseReplay({ ...rest, version: 2, scene: 'empty' });
+    expect(v2.save).toBeNull();
+    expect(playReplay(v2, create).finalHash).toBe(hash);
     expect(playReplay(migrated, create).finalHash).toBe(hash);
     expect(() => parseReplay({ ...v1, frames: 'x' })).toThrow();
   });

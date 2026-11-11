@@ -3,6 +3,7 @@ import type { Seed } from '../core/brand';
 import { cos, sin, PI } from '../math/dmath';
 import { Rng } from '../math/prng';
 import type { MaterialId } from '../procgen/materials';
+import { SITE_POINTS } from '../story/sites';
 import { CHUNK_SIZE } from './chunks';
 import type {
   BlockerPiece,
@@ -173,8 +174,15 @@ class ChunkBuilder {
   }
 }
 
-/** Points nothing may be built on: the player start and the hub anchors (teleport targets). */
-const RESERVED: readonly Vec3[] = [WORLD_SPAWN.position, ...HUBS.map((h) => h.anchor)];
+/**
+ * Points nothing may be built on: the player start, the hub anchors (teleport
+ * targets) and the story's sites (logs, generators, terminals).
+ */
+const RESERVED: readonly Vec3[] = [
+  WORLD_SPAWN.position,
+  ...HUBS.map((h) => h.anchor),
+  ...SITE_POINTS,
+];
 
 function nearReserved(x: number, z: number): boolean {
   for (const p of RESERVED) {

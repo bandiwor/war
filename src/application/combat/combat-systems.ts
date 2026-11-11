@@ -195,6 +195,33 @@ export function giveLoadout(world: World, player: EntityId, o: LoadoutOptions): 
   a.infinite[arow] = o.infinite ? 1 : 0;
 }
 
+/**
+ * Puts a carried weapon back as a save recorded it: drawn fresh (the draw
+ * plays again on load), with the saved magazine, chamber, wear and fire mode.
+ */
+export function restoreWeapon(
+  world: World,
+  item: EntityId,
+  saved: {
+    readonly mag: number;
+    readonly chambered: boolean;
+    readonly wear: number;
+    readonly mode: number;
+  },
+): void {
+  const items = world.store(WeaponItem);
+  const row = items.rowOf(item);
+  if (row < 0) return;
+  const id = WEAPON_IDS[at(items.fields.weapon, row)];
+  if (id === undefined) return;
+  const s = createWeaponState(WEAPONS[id]);
+  s.mag = saved.mag;
+  s.chambered = saved.chambered;
+  s.wear = saved.wear;
+  s.fireModeIndex = saved.mode;
+  encode(items, row, s);
+}
+
 export function spawnTargets(world: World, targets: readonly TargetPiece[]): void {
   const store = world.store(Target);
   for (const t of targets) {

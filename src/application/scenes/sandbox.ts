@@ -1,3 +1,6 @@
+import { CAMPAIGN } from '../../domain/story/campaign';
+import type { StoryData } from '../../domain/story/schema';
+import { StoryRuntime, storySystem } from '../story/story-system';
 import { at, defineComponent } from '../../domain/ecs/component';
 import type { EntityId } from '../../domain/ecs/entity';
 import type { System } from '../../domain/ecs/schedule';
@@ -416,6 +419,8 @@ export interface Sandbox {
   readonly chunks: ChunkColliders | null;
   /** AI services: nav grid, paths, budgets, counters. */
   readonly ai: AiRuntime;
+  /** The running story (open world), or null. */
+  readonly story: StoryRuntime | null;
 }
 
 export type SandboxKind = 'street' | 'range' | 'world';
@@ -425,6 +430,8 @@ export interface SandboxOptions {
   /** A hand-made layout instead of the kind's generator (AI scenario tests, later the editor). */
   readonly layout?: StreetLayout;
   readonly tuning?: PlayerTuning;
+  /** The story to run (default: the campaign in the open world, none elsewhere). */
+  readonly story?: StoryData | null;
 }
 
 /** `physics` must be a fresh, empty world for this sandbox (it is populated here). */
@@ -560,6 +567,19 @@ export function createSandbox(
     vitalsSystem(player, probe, respawn),
     spawnerSystem(ai, probe, { population: kind === 'world' ? WORLD_POPULATION : 0 }),
   ];
+  const storyData =
+    options.story === undefined ? (kind === 'world' ? CAMPAIGN : null) : options.story;
+  const story = storyData === null ? null : new StoryRuntime(storyData);
+  const storySystems: System<SimContext>[] =
+    story === null
+      ? []
+      : [
+          storySystem(story, ai, probe, player, (ctx) => {
+            const fl = ctx.world.store(Flashlight);
+            const r = fl.rowOf(player);
+            if (r >= 0) fl.fields.battery[r] = 1;
+          }),
+        ];
   const worldSystems: System<SimContext>[] = [];
   if (chunks !== null) {
     worldSystems.push(
@@ -612,6 +632,7 @@ export function createSandbox(
       targetSystem(kind === 'range'),
       ...worldSystems,
       ...aiSystems,
+      ...storySystems,
     ],
     hashExtras: [
       (h) => {
@@ -620,9 +641,12 @@ export function createSandbox(
       (h) => {
         ai.pheromone.hashInto(h);
       },
+      (h) => {
+        story?.engine.hashInto(h);
+      },
     ],
   });
-  return { simulation, player, layout, physics, tuning, kind, chunks, ai };
+  return { simulation, player, layout, physics, tuning, kind, chunks, ai, story };
 }
 
 /** Everything the renderer needs for one frame, interpolated. Reused, never reallocated. */

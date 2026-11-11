@@ -26,7 +26,9 @@
     "golden:update": "UPDATE_GOLDEN=1 vitest run tests/golden",
     "perf": "tsx scripts/perf-gate.ts",
     "check:bundle": "node scripts/check-bundle.mjs",
-    "level:check": "tsx scripts/check-levels.ts"
+    "level:check": "tsx scripts/check-levels.ts",
+    "balance": "tsx scripts/balance.ts",
+    "profile": "tsx scripts/profile.ts"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",

@@ -53,6 +53,7 @@ interface CallQueue {
  */
 export function networkSystem(ai: AiRuntime, player: PlayerProbe): System<SimContext> {
   const p = newPlayerState();
+  let net = new Int32Array(64);
   return {
     name: 'ai.network',
     after: ['ai.perceive'],
@@ -64,6 +65,14 @@ export function networkSystem(ai: AiRuntime, player: PlayerProbe): System<SimCon
       const t = world.store(Target);
       const f = mob.fields;
       const hazards = world.tryStore(Hazard);
+      // Networked robots, collected once (ascending rows: the same order as a full scan).
+      if (net.length < mob.size) net = new Int32Array(mob.size * 2);
+      let netCount = 0;
+      for (let row = 0; row < mob.size; row++) {
+        const s = MOBS[mobAt(f.kind[row] ?? 0) ?? 'shambler'];
+        if (s.race === 'robot' && s.tactics.network > 0 && f.action[row] !== DEAD_ACTION)
+          net[netCount++] = row;
+      }
       for (let row = 0; row < mob.size; row++) {
         const spec = MOBS[mobAt(f.kind[row] ?? 0) ?? 'shambler'];
         if (spec.race !== 'robot' || f.action[row] === DEAD_ACTION) continue;
@@ -113,10 +122,9 @@ export function networkSystem(ai: AiRuntime, player: PlayerProbe): System<SimCon
         if (spec.tactics.network <= 0 || f.sensing[row] !== 1) continue;
         f.informed[row] = 0;
         const range = spec.tactics.network;
-        for (let other = 0; other < mob.size; other++) {
-          if (other === row || f.sensing[other] === 1 || f.action[other] === DEAD_ACTION) continue;
-          const os = MOBS[mobAt(f.kind[other] ?? 0) ?? 'shambler'];
-          if (os.race !== 'robot' || os.tactics.network <= 0) continue;
+        for (let n = 0; n < netCount; n++) {
+          const other = net[n] ?? 0;
+          if (other === row || f.sensing[other] === 1) continue;
           const otr = t.rowOf(entity(mob.dense[other] ?? 0));
           if (otr < 0) continue;
           const ox = (t.fields.x[otr] ?? 0) - mx;

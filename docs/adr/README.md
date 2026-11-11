@@ -20,3 +20,4 @@ New ADRs get the next number; superseded ones stay, marked as superseded.
 | 0013 | [Race behaviours, sound signatures and looks](0013-race-behaviours.md)                           | Accepted |
 | 0014 | [Data-driven story, logs and radio, endings, saves with migrations](0014-story-and-saves.md)     | Accepted |
 | 0015 | [The level editor, level format and automatic level checks](0015-level-editor.md)                | Accepted |
+| 0016 | [Automatic quality scaling, profiling and balance as tests](0016-optimisation-and-polish.md)     | Accepted |

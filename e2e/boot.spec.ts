@@ -41,7 +41,8 @@ test('every bodycam effect toggles from the debug menu', async ({ page }) => {
   // 15 effects × 2 toggles, each confirmed on a rendered frame; software GL is slow.
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 480, height: 270 });
-  await page.goto('/?seed=1337&quality=low');
+  // Manual toggles only: automatic quality scaling (which may drop motion blur and bloom on slow GL) is off.
+  await page.goto('/?seed=1337&quality=low&auto=0');
   await expect(page.locator('#app')).toHaveAttribute('data-debug', '1', { timeout: 60_000 });
   await page.keyboard.press('Backquote');
   const menu = page.getByTestId('debug-menu');

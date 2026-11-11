@@ -1,5 +1,5 @@
 import type { GameLoop } from '../../application/loop/game-loop';
-import type { Simulation } from '../../application/simulation';
+import { systemTimings, type Simulation, type SystemProfiler } from '../../application/simulation';
 import {
   EFFECT_IDS,
   POST_EFFECTS,
@@ -53,6 +53,9 @@ export interface WarDebugApi {
     footsteps: number;
     audioPlayed: number;
     replayTicks: number;
+    /** Automatic quality: resolution factor and degradation tier. */
+    autoScale: number;
+    autoTier: string;
   };
   setColliders(enabled: boolean): void;
   pauseAtTick(tick: number): void;
@@ -99,6 +102,9 @@ export interface WarDebugApi {
   saveGame: StoryDebugApi['saveGame'];
   loadGame: StoryDebugApi['loadGame'];
   saveSlots: StoryDebugApi['saveSlots'];
+  /** Per-system timings (mean ms/tick), after `profileSystems(true)`. */
+  profileSystems(on: boolean): void;
+  systemTimings(): { name: string; ms: number; share: number }[];
   audioStats(): {
     zones: Partial<Record<string, number>>;
     levels: Partial<Record<string, number>>;
@@ -184,6 +190,16 @@ export function installDebugMenu({
     });
     sim.append(pause, step);
   }
+  // Per-system profiling: the simulation times each system with this page's clock.
+  let sysProfiler: SystemProfiler | null = null;
+  const profBox = el('input');
+  profBox.type = 'checkbox';
+  profBox.addEventListener('change', () => {
+    sysProfiler = simulation.setProfiler(profBox.checked ? () => performance.now() : null);
+  });
+  const profLabel = el('label', '', ' profile systems');
+  profLabel.prepend(profBox);
+  sim.append(profLabel);
   const replayBox = el('fieldset');
   replayBox.append(
     el(
@@ -234,7 +250,17 @@ export function installDebugMenu({
   });
   const colliderLabel = el('label', '', ' physics colliders');
   colliderLabel.prepend(colliders);
+  const auto = el('input');
+  auto.type = 'checkbox';
+  auto.checked = presenter.governor.enabled;
+  auto.addEventListener('change', () => {
+    presenter.governor.enabled = auto.checked;
+  });
+  const autoLabel = el('label', '', ' automatic quality');
+  autoLabel.prepend(auto);
   render.append(
+    autoLabel,
+    el('br'),
     renderInfo,
     graph.canvas,
     el('label', '', 'quality '),
@@ -478,6 +504,8 @@ export function installDebugMenu({
       footsteps: session.footstepCount,
       audioPlayed: session.audio?.played ?? 0,
       replayTicks: session.recorder?.ticks ?? 0,
+      autoScale: presenter.governor.scale,
+      autoTier: presenter.governor.tierName,
     };
   };
 
@@ -531,6 +559,11 @@ export function installDebugMenu({
       };
     },
     selectWeapon,
+    profileSystems(on) {
+      profBox.checked = on;
+      sysProfiler = simulation.setProfiler(on ? () => performance.now() : null);
+    },
+    systemTimings: () => (sysProfiler === null ? [] : systemTimings(sysProfiler)),
     ...worldTab.api,
     ...bestiaryTab.api,
     ...storyTab.api,
@@ -606,6 +639,18 @@ export function installDebugMenu({
         `steps  ${String(session.footstepCount)}  last surface ${session.footsteps?.lastSurface.value ?? '-'}`,
         `audio  ${session.audio === null ? 'unavailable' : session.audio.running ? `running, ${String(session.audio.played)} sounds` : 'locked (click to start)'}`,
         `replay ${session.playing !== null ? `playing ${String(session.playing.length)} ticks` : `${String(session.recorder?.ticks ?? 0)} ticks recorded`}`,
+        ...(sysProfiler === null
+          ? []
+          : [
+              '',
+              `systems (mean ms/tick over ${String(sysProfiler.ticks)} ticks)`,
+              ...systemTimings(sysProfiler)
+                .slice(0, 12)
+                .map(
+                  (x) =>
+                    `  ${x.name.padEnd(20)} ${x.ms.toFixed(4)} ${(x.share * 100).toFixed(1).padStart(5)}%`,
+                ),
+            ]),
       ].join('\n');
       const s = stats();
       const p = presenter.profiler;
@@ -618,6 +663,7 @@ export function installDebugMenu({
         `gpu      ${s.gpuMs === null ? 'n/a (timer query unavailable)' : `${s.gpuMs.toFixed(2)} ms${over(s.gpuMs, FRAME_BUDGETS.gpu)}`}`,
         `draws    ${String(s.drawCalls)}   tris ${String(s.triangles)}`,
         `internal ${String(size.width)}×${String(size.height)}`,
+        `auto     ${presenter.governor.enabled ? 'on' : 'off'} · scale ${presenter.governor.scale.toFixed(2)} · tier ${presenter.governor.tierName} · ${String(presenter.governor.changes)} changes · window ${presenter.governor.mean?.toFixed(1) ?? '…'} ms`,
         `memory   ${heapMb()}`,
         `post     ${s.graph}`,
         `bake     ${[...presenter.bakeTimes].map(([k, v]) => `${k} ${v.toFixed(0)}ms`).join(', ')}`,

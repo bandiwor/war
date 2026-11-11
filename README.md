@@ -11,52 +11,35 @@ tablets get on-screen controls, best in landscape).
 deterministic: seed + input commands + tick number ⇒ identical world state, verified by golden
 replays.
 
-> Status: **stage 9, the level editor.** Built into the game (`?editor=1` or F4). It runs on the
-> same engine, registries and serialisation as the game. You place objects, mobs, lights, story
-> objects, spawn zones and patrol paths, and shape the ground with terrain and decor brushes,
-> with undo/redo and grid snapping. Levels are versioned, diff-friendly JSON with migrations,
-> and "play from here" drops you into the real bodycam game on the level. Automatic checks,
-> using the game's own nav grid, run live and in CI: reachability, stuck spawns and mobs,
-> patrol paths, spawn zones, story references and budgets.
-> Guide: [docs/guides/adding-a-level.md](docs/guides/adding-a-level.md).
-> Previously: **stage 8, the story.** You are KESTREL-2, the last of a recovery team sent into the
-> Varn quarantine zone. The campaign runs five chapters across the five hubs and ends in one of
-> three endings. It is told over the radio (subtitled, with a synthesised radio voice), in found
-> notes, audio logs and other people's bodycam recordings, and kept in a journal (J). The story
-> is data: quests, objectives, triggers, logs, radio and interactables, all validated, with every
-> race's origin, motive and weakness told in some log. Saves (F5 quicksave, F9 quickload,
-> autosave at each chapter) are versioned JSON with migrations. Replays can start from a save.
-> Story: [docs/lore/story.md](docs/lore/story.md).
-> Previously: **stage 7, the races.** Zombies hunt by smell through a diffusing pheromone field,
-> recruit each other with alarm scent and flee light. Animals have hunger, fear, packs and
-> territory, warn before they attack and fear the flashlight. Plants bite, spit acid that pools
-> and burns, and creepers leap and latch on until shaken off. Robots see through cameras you can
-> blind, share sightings over a network, flank, take cover, call reinforcements, chase flares,
-> and their radio interference disturbs the bodycam. Each race has its own looks in code (fungus
-> and rags, wheels and tally lights, jaws and L-system vines, tusks and tails) and its own sound
-> signature. Lore: [docs/lore/races.md](docs/lore/races.md).
-> Previously: **stage 6, AI and bestiary.** Eight placeholder mobs (two per race), all registry data.
-> A utility AI senses you (camera cones that need light, hearing, short-range scent), remembers
-> where you were, searches, chases, attacks and flees. Mobs path around obstacles on a
-> deterministic nav grid within fixed per-tick budgets, and the open world populates itself zone
-> by zone. The debug bestiary lists every mob, weapon, effect and material automatically, with a
-> test stage (orbit, animations, slow motion, bones, hitboxes, vision cone). Registry edits
-> hot-reload into the running game.
-> Previously: **stage 5, the open world.** A 512 m world of five hub zones (abandoned city, industrial
-> yards, subway station, forest, research complex) joined by roads, generated chunk by chunk from
-> the seed and streamed around you. Colliders stream deterministically in the simulation, and
-> meshes are built in Web Workers within a per-frame budget. A dusk-to-night clock and drifting
-> weather (fog, rain, wind) change the light, the fog, the lens and the soundscape.
-> Previously: **stage 4, weapons.** Registry-driven firearms, melee and throwables with drag ballistics,
-> chamber-aware reloads, jams, recoil patterns, per-race hit zones, synthesized gunshots, and a
-> debug shooting range (`/?scene=range`). Previously: **stage 3, audio.** A procedural soundscape in an AudioWorklet (wind, hum, insects, drips,
-> creaks, rumble…) that changes with zone, night, danger and health, reverb computed from the
-> surrounding geometry, occlusion, and distant events (feral dogs, sirens, robot radio).
-> Previously: **stage 2, physics and player.** A Rapier-driven first-person body (walk, sprint with
-> stamina, crouch, jump, curb step-ups) with synthesized footsteps per surface, and replays
-> verified by a golden physics replay. Previously: **stage 1, rendering and bodycam.** A procedural night street (PBR materials baked from
-> seeds in Web Workers), a flashlight, and a 15-module bodycam post stack driven by gameplay stimulus,
-> all toggleable from the debug menu. See [the plan](#roadmap).
+All eleven stages of the plan (0–10) are done. [docs/stages.md](docs/stages.md) lists each
+stage, its acceptance criterion and the tests that demonstrate it.
+
+**What is in the game**
+
+- **Bodycam footage.** A night world lit by your flashlight, lamps, emergency beacons and
+  bioluminescence. It is seen through 15 post-processing modules (fisheye, rolling shutter,
+  compression, signal loss, an on-screen display…) that react to damage, fear and the robots'
+  radio interference.
+- **A semi-open world.** Five hub zones (abandoned city, industrial yards, subway station,
+  forest, research complex) are generated from the seed and streamed in chunks. A clock runs
+  from dusk into night, and fog, rain and wind change what you see and hear.
+- **Four races.** Each has its own AI, looks and sound, defined in the lore:
+  - zombies hunt by smell through a pheromone field and flee light;
+  - robots see through cameras, network, flank and take cover;
+  - plants bite, spit acid and leap onto you;
+  - animals have hunger, fear, packs and territory.
+- **Weapons.** Real ballistics, recoil, chamber-aware reloads and jams. Damage depends on body
+  part and race. Balance is checked against design targets; see
+  [docs/balance.md](docs/balance.md).
+- **A story.** Five chapters and three endings, told over the radio, in found logs and in other
+  people's camera recordings. There is a journal, and versioned saves with migrations.
+- **A level editor built into the game** (`?editor=1`, F4). Levels are diff-friendly JSON, and
+  automatic checks cover reachability and stuck spots. "Play from here" drops you into the level.
+- **Automatic quality scaling.** Resolution drops first, then shadows, then costly post effects,
+  to hold the frame budget. A profiler times every simulation system.
+  [docs/performance.md](docs/performance.md) has the measurements.
+
+Lore: [the story](docs/lore/story.md) · [the races](docs/lore/races.md).
 
 ## Quick start
 
@@ -123,19 +106,22 @@ That simulates one hour of game time in Node and prints the state hash and throu
 
 ## Scripts
 
-| Script                  | What it does                                                     |
-| ----------------------- | ---------------------------------------------------------------- |
-| `npm run dev`           | Vite dev server with HMR                                         |
-| `npm run build`         | Typecheck + production build to `dist/`                          |
-| `npm run typecheck`     | `tsc --noEmit` (strict)                                          |
-| `npm run lint`          | ESLint, type-aware, layer and determinism rules, zero warnings   |
-| `npm test`              | Vitest unit, property and golden tests                           |
-| `npm run test:coverage` | Same, with coverage thresholds                                   |
-| `npm run test:e2e`      | Playwright browser tests                                         |
-| `npm run bench`         | Micro-benchmarks (tinybench)                                     |
-| `npm run perf`          | CI perf gate: ticks/s floor and zero-allocation (minor GC) check |
-| `npm run golden:update` | Regenerate golden hashes/replays (review the diff!)              |
-| `npm run ci`            | Every local gate in sequence                                     |
+| Script                  | What it does                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run dev`           | Vite dev server with HMR                                                                     |
+| `npm run build`         | Typecheck + production build to `dist/`                                                      |
+| `npm run typecheck`     | `tsc --noEmit` (strict)                                                                      |
+| `npm run lint`          | ESLint, type-aware, layer and determinism rules, zero warnings                               |
+| `npm test`              | Vitest unit, property and golden tests                                                       |
+| `npm run test:coverage` | Same, with coverage thresholds                                                               |
+| `npm run test:e2e`      | Playwright browser tests                                                                     |
+| `npm run bench`         | Micro-benchmarks (tinybench)                                                                 |
+| `npm run perf`          | CI perf gate: ticks/s floor and zero-allocation (minor GC) check                             |
+| `npm run profile`       | Per-system timings and a CPU profile of a heavy headless scenario (`-- world\|crowd\|level`) |
+| `npm run balance`       | Regenerate the balance sheet (`docs/balance.md`) from the registries                         |
+| `npm run level:check`   | Automatic checks over every shipped level (`levels/*.level.json`)                            |
+| `npm run golden:update` | Regenerate golden hashes/replays (review the diff!)                                          |
+| `npm run ci`            | Every local gate in sequence                                                                 |
 
 ## Architecture
 
@@ -146,9 +132,10 @@ Guides: [add a system](docs/guides/adding-a-system.md) ·
 [add a bodycam effect](docs/guides/adding-an-effect.md) ·
 [add a material](docs/guides/adding-a-material.md) ·
 [add a zone soundscape](docs/guides/adding-a-zone-soundscape.md) ·
-[add a weapon](docs/guides/adding-a-weapon.md).
+[add a weapon](docs/guides/adding-a-weapon.md) · [add a mob](docs/guides/adding-a-mob.md) ·
+[add a quest](docs/guides/adding-a-quest.md) · [make a level](docs/guides/adding-a-level.md).
 
-## Roadmap
+## Stages
 
 0. ✅ Skeleton: strict TS, lint, tests, CI, deterministic PRNG and fixed-step loop
 1. ✅ Rendering and bodycam post-processing
@@ -157,7 +144,7 @@ Guides: [add a system](docs/guides/adding-a-system.md) ·
 4. ✅ Weapons
 5. ✅ World streaming, time of day, weather
 6. ✅ AI core, bestiary, HMR
-7. Races: zombies → animals → plants → robots
-8. Story, quests, saves
-9. Level editor
-10. Optimisation and polish
+7. ✅ Races: zombies → animals → plants → robots
+8. ✅ Story, quests, logs and radio, endings, saves with migrations
+9. ✅ Level editor with automatic checks
+10. ✅ Optimisation and polish: profiling, quality scaling, balance, final run

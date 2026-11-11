@@ -2,36 +2,42 @@
 
 ```mermaid
 flowchart TB
-  subgraph presentation["presentation (browser composition root, UI, debug menu)"]
-    main[main.ts]
-    main --> debug[debug/ — DEV only, tree-shaken]
+  subgraph presentation["presentation (composition roots and UI)"]
+    main[main.ts: game · story HUD · saves · F4]
+    editorUi[editor/: level editor app, code-split]
+    main --> debug[debug/: DEV only, tree-shaken]
   end
   subgraph headless["headless (Node composition root)"]
-    cli[cli.ts / run.ts]
+    cli[cli.ts / run.ts · scripts: perf · profile · balance · level:check]
   end
   subgraph infrastructure["infrastructure (adapters)"]
-    raf[RafFrameSource]
-    kbd[KeyboardMouseInput]
-    rend[BodycamPresenter: render graph · post effects · workers]
+    raf[RafFrameSource · input · save slots]
+    rend[BodycamPresenter: render graph · 15 post effects · governor · workers]
+    edView[EditorView: same scene builder and materials]
+    audio[AudioEngine: worklet ambience · weapon, mob and story voices]
+    phys[RapierPhysics]
   end
-  subgraph application["application (use cases, ports)"]
+  subgraph application["application (systems, use cases, ports)"]
     loop[GameLoop + FixedStepAccumulator]
-    sim[Simulation]
-    replay[Replay record / playback]
-    scenes[scenes/]
-    ports{{ports: FrameSource · InputSource · Presenter}}
+    sim[Simulation + per-system profiler]
+    scenes[scenes/sandbox: player · weapons · AI · story · level]
+    replay[Replays v3 · saves capture/restore]
+    ports{{ports: FrameSource · InputSource · Presenter · PhysicsPort}}
   end
   subgraph domain["domain (pure, deterministic)"]
     ecs[ECS: entities · SoA stores · schedule]
-    math[sfc32 Rng streams · StateHasher · dmath]
-    data[registries: materials · bodycam effects · layouts]
-    input[InputCommand schema]
+    math[Rng streams · StateHasher · dmath]
+    regs[registries: weapons · mobs · materials · effects · zones]
+    ai[AI: utility · perception · pheromones · drives · nav A*]
+    story[story: schema · campaign · engine · saves]
+    level[level: format · compiler · checks · editor commands]
+    perf[perf governor · balance model]
   end
   presentation --> infrastructure --> application --> domain
   headless --> application
   raf -. implements .-> ports
-  kbd -. implements .-> ports
   rend -. implements .-> ports
+  phys -. implements .-> ports
 ```
 
 ## Frame flow
@@ -87,3 +93,15 @@ never touches the state hash.
 | `eslint/architecture.js`     | Layer and determinism lint rules                                                                                                                                    |
 | `scripts/`                   | Perf gate, bundle check                                                                                                                                             |
 | `docs/adr`                   | Architecture decision records                                                                                                                                       |
+
+## Stages 8–10 at a glance
+
+- **Story** (ADR-0014). Data in `domain/story`, a pure engine and the `story.step` system. Notes go
+  out on the `story` event channel to the HUD, the radio voices and the autosave. Saves are
+  progress checkpoints with migrations, and replays can start from one.
+- **Levels** (ADR-0015). A level compiles to the same `StreetLayout` every scene uses. The
+  editor's commands, brushes and checks are pure domain code. "Play from here" is
+  `createLevelSandbox`.
+- **Polish** (ADR-0016). The governor scales quality in the presenter. `Simulation.setProfiler`
+  times systems with an outside clock. `domain/balance` turns the registries into a balance
+  sheet with design targets as tests.

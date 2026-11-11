@@ -41,6 +41,25 @@ export interface SimulationOptions {
 // array-iterator fast path and allocates on every tick (caught by perf gate).
 const NO_COMMANDS: readonly InputCommand[] = [];
 
+/** Accumulated time per system (same order as `systemOrder`) since profiling started. */
+export interface SystemProfiler {
+  readonly clock: () => number;
+  readonly names: readonly string[];
+  readonly totals: Float64Array;
+  ticks: number;
+}
+
+/** Mean milliseconds per tick of each system, slowest first. */
+export function systemTimings(p: SystemProfiler): { name: string; ms: number; share: number }[] {
+  const total = p.totals.reduce((a, b) => a + b, 0) || 1;
+  return p.names
+    .map((name, i) => {
+      const t = p.totals[i] ?? 0;
+      return { name, ms: t / Math.max(1, p.ticks), share: t / total };
+    })
+    .sort((a, b) => b.ms - a.ms);
+}
+
 /**
  * Deterministic simulation: state after N ticks is a pure function of
  * (seed, per-tick commands, N). It has no notion of wall-clock time.
@@ -56,6 +75,7 @@ export class Simulation {
   private readonly ctx: MutableContext;
   private readonly hasher = new StateHasher();
   private currentTick = 0;
+  private profiler: SystemProfiler | null = null;
 
   constructor(options: SimulationOptions) {
     if (!Number.isInteger(options.tickRate) || options.tickRate <= 0) {
@@ -94,9 +114,41 @@ export class Simulation {
     ctx.commands = commands;
     this.events.clear();
     const schedule = this.schedule;
-    for (let i = 0; i < schedule.length; i++) schedule[i]?.run(ctx);
+    const prof = this.profiler;
+    if (prof === null) {
+      for (let i = 0; i < schedule.length; i++) schedule[i]?.run(ctx);
+    } else {
+      // Instrumented: the clock is the profiler's (outside the simulation), so timing never feeds back.
+      let t = prof.clock();
+      for (let i = 0; i < schedule.length; i++) {
+        schedule[i]?.run(ctx);
+        const now = prof.clock();
+        prof.totals[i] = (prof.totals[i] ?? 0) + (now - t);
+        t = now;
+      }
+      prof.ticks++;
+    }
     ctx.commands = NO_COMMANDS;
     this.currentTick++;
+  }
+
+  /**
+   * Starts (or with null stops) timing every system, for the debug menu and
+   * the profiling script. The clock comes from outside (`performance.now` in
+   * the browser), so the simulation stays free of wall-clock reads; timings are
+   * observed, never used.
+   */
+  setProfiler(clock: (() => number) | null): SystemProfiler | null {
+    this.profiler =
+      clock === null
+        ? null
+        : {
+            clock,
+            names: this.systemOrder,
+            totals: new Float64Array(this.schedule.length),
+            ticks: 0,
+          };
+    return this.profiler;
   }
 
   /** Fingerprint of everything that defines the simulation state. */

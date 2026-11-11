@@ -357,7 +357,8 @@ const RAW = {
     cycleSeconds: 0.5,
     muzzleVelocity: 400,
     pellets: 9,
-    damage: 17,
+    // Stage 10 balance: one pump to the chest drops a shambler at room distance (was 17).
+    damage: 24,
     falloff: { start: 8, end: 35, min: 0.25 },
     accuracyMoa: 6,
     pelletSpreadDeg: 2.8,

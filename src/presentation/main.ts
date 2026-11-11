@@ -101,6 +101,8 @@ async function bootstrap(): Promise<void> {
   baker.dispose();
   applyFxSelection(presenter.postFx, opts.fx);
   if (opts.stimulus !== null) presenter.stimulusOverride = opts.stimulus;
+  // A benchmark measures the preset as asked: no automatic scaling during it.
+  presenter.governor.enabled = opts.autoQuality && opts.benchSeconds === 0;
   if (opts.signal > 0) presenter.signal.force(opts.signal);
   status.remove();
 

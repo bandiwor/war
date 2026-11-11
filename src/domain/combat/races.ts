@@ -45,7 +45,7 @@ export const VULNERABILITY: Readonly<Record<Race, Vulnerability>> = {
     maxHealth: 220,
   },
   plant: {
-    types: { ballistic: 0.5, slash: 1.5, blunt: 0.6, fire: 4, explosive: 1.5, emp: 0, light: 0.5 },
+    types: { ballistic: 0.5, slash: 1.5, blunt: 0.6, fire: 4, explosive: 1.5, emp: 0, light: 0 },
     parts: { bulb: 2.5, stem: 0.8, head: 1.2 },
     maxHealth: 160,
   },

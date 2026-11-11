@@ -230,7 +230,26 @@ export class RapierPhysics implements PhysicsPort {
 
   step(): void {
     if (this.dirty) {
-      this.world.step();
+      // world.step() is this pipeline step followed by a full JS-side resync of Rapier's
+      // handle maps (one WASM call per collider: O(streamed colliders) on every step after a
+      // chunk load, the top of the stage-10 CPU profile). We never let the pipeline create or
+      // remove anything (no dynamic or soft bodies; every add/remove goes through the JS API,
+      // which keeps the maps itself), so the resync is pure overhead. The simulation state is
+      // the same either way: the golden hashes did not move.
+      const w = this.world;
+      w.physicsPipeline.step(
+        w.gravity,
+        w.integrationParameters,
+        w.islands,
+        w.broadPhase,
+        w.narrowPhase,
+        w.bodies,
+        w.colliders,
+        w.softBodies,
+        w.impulseJoints,
+        w.multibodyJoints,
+        w.ccdSolver,
+      );
       this.dirty = false;
     }
   }

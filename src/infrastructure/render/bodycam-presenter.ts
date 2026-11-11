@@ -31,6 +31,7 @@ import { CombatFx } from './weapons/combat-fx';
 import { MobRenderer } from './mobs/mob-renderer';
 import { MobFx } from './mobs/mob-fx';
 import { StoryProps } from './story/story-props';
+import { QualityGovernor } from '../../domain/perf/governor';
 import { AiOverlay } from './mobs/ai-overlay';
 import type { GameEvents } from '../../domain/events/bus';
 import { WEAPONS } from '../../domain/weapons/registry';
@@ -65,6 +66,8 @@ export class BodycamPresenter implements Presenter {
   /** When set, replaces the gameplay stimulus (debug sliders). */
   stimulusOverride: BodycamStimulus | null = null;
   readonly profiler: FrameProfiler;
+  /** Automatic quality scaling (stage 10): dynamic resolution, then feature tiers. */
+  readonly governor = new QualityGovernor();
   readonly signal: SignalLossScheduler;
   readonly view: RenderView = createRenderView();
   readonly camera: THREE.PerspectiveCamera;
@@ -339,8 +342,9 @@ export class BodycamPresenter implements Presenter {
     const w = Math.max(1, Math.floor(canvas.clientWidth * ratio));
     const h = Math.max(1, Math.floor(canvas.clientHeight * ratio));
     this.renderer.setSize(w, h, false);
-    this.internalWidth = Math.max(1, Math.round(w * q.renderScale));
-    this.internalHeight = Math.max(1, Math.round(h * q.renderScale));
+    const scale = q.renderScale * this.governor.scale;
+    this.internalWidth = Math.max(1, Math.round(w * scale));
+    this.internalHeight = Math.max(1, Math.round(h * scale));
     this.sceneTarget.setSize(this.internalWidth, this.internalHeight);
     this.pipeline.setSize(this.internalWidth, this.internalHeight);
     this.camera.aspect = w / h;
@@ -370,6 +374,11 @@ export class BodycamPresenter implements Presenter {
     clonePostFx(this.postFx, this.effective);
     modulatePostFx(this.postFx, this.stimulus, this.effective);
     applyWeatherToPostFx(this.postFx, this.sceneRig.wetness, this.effective);
+    // The governor's last tier gives up the costliest cosmetic passes (the user's settings stay).
+    if (this.governor.tier >= 2) {
+      this.effective.motionBlur.enabled = false;
+      this.effective.bloom.enabled = false;
+    }
     const fx = this.effective;
 
     this.rig.update(
@@ -444,6 +453,25 @@ export class BodycamPresenter implements Presenter {
       this.renderer.info.render.calls,
       this.renderer.info.render.triangles,
     );
+    if (frozen === undefined) this.govern();
+  }
+
+  /**
+   * Feeds the governor the frame's cost: GPU time when the browser reports it
+   * (the real limit), else the frame interval (vsync-capped, so it only ever
+   * says "too slow", which is the case that matters).
+   */
+  private govern(): void {
+    const p = this.profiler;
+    const cost =
+      p.gpuTimingAvailable && p.gpuMs.count > 0
+        ? Math.max(p.cpuMs.recent(0), p.gpuMs.recent(0))
+        : p.frameMs.count > 0
+          ? p.frameMs.recent(0)
+          : 0;
+    const change = this.governor.update(cost);
+    if (change === 'scale') this.resize();
+    else if (change === 'tier') this.flashlight.light.castShadow = this.governor.tier < 1;
   }
 
   dispose(): void {
